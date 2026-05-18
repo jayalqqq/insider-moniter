@@ -1,6 +1,8 @@
 import html as _html
 import json
+import pathlib
 import re as _re
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
 
@@ -8,6 +10,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import requests
+from requests.adapters import HTTPAdapter
 import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
@@ -326,6 +329,38 @@ TXN_PILL_HTML = {
 NOTABLE_RE  = _re.compile(r"\b(Chief|CEO|CFO|President)\b", _re.IGNORECASE)
 SEE_RMKS_RE = _re.compile(r"see\s+remarks", _re.IGNORECASE)
 
+# ── Persistent filing cache ────────────────────────────────────────────────────
+_CACHE_FILE = pathlib.Path("filing_cache.json")
+_cache_lock = threading.Lock()
+
+
+def _load_filing_cache() -> dict:
+    try:
+        if _CACHE_FILE.exists():
+            return json.loads(_CACHE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_filing_cache(cache: dict) -> None:
+    with _cache_lock:
+        try:
+            _CACHE_FILE.write_text(
+                json.dumps(cache, ensure_ascii=False), encoding="utf-8"
+            )
+        except Exception:
+            pass
+
+
+_filing_cache: dict = _load_filing_cache()
+
+# ── Shared HTTP session (connection-pool reuse across 50 threads) ─────────────
+_session = requests.Session()
+_session.headers.update(HEADERS)
+_session.mount("https://", HTTPAdapter(pool_connections=50, pool_maxsize=50))
+_session.mount("http://",  HTTPAdapter(pool_connections=10, pool_maxsize=10))
+
 # ── Regex for SEC .txt parsing ────────────────────────────────────────────────
 _CIK_RE    = _re.compile(r"\s*\(CIK\s+\d+\)\s*$", _re.IGNORECASE)
 _CODE_RE   = _re.compile(r"<transactionCode>([^<]+)</transactionCode>", _re.I)
@@ -395,7 +430,7 @@ def _fetch_filing_data(adsh: str, cik: str) -> dict:
         "transaction_date": None,
     }
     try:
-        resp = requests.get(_build_txt_url(adsh, cik), headers=HEADERS, timeout=10)
+        resp = _session.get(_build_txt_url(adsh, cik), timeout=5)
         if resp.status_code != 200:
             return default
         text = resp.text
@@ -440,7 +475,7 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
             "https://query2.finance.yahoo.com/v1/finance/search"
             f"?q={requests.utils.quote(company_name)}&quotesCount=1&newsCount=0"
         )
-        resp   = requests.get(url, headers=HEADERS, timeout=8)
+        resp   = _session.get(url, timeout=8)
         quotes = resp.json().get("quotes", [])
         if quotes and quotes[0].get("quoteType") == "EQUITY":
             q = quotes[0]
@@ -521,7 +556,7 @@ def fetch_filings(start_dt: str, end_dt: str) -> pd.DataFrame:
             "startdt": start_dt, "enddt": end_dt, "from": page * per_page,
         }
         try:
-            resp = requests.get(BASE_URL, headers=HEADERS, params=params, timeout=15)
+            resp = _session.get(BASE_URL, params=params, timeout=15)
             resp.raise_for_status()
             data = resp.json()
         except Exception as e:
@@ -573,25 +608,73 @@ def _parse_hits(hits: list) -> pd.DataFrame:
     return df
 
 
-# ── Phase 1: SEC .txt enrichment (parallel) ───────────────────────────────────
-def enrich_with_filing_data(df: pd.DataFrame) -> pd.DataFrame:
+# ── Phase 1: SEC .txt enrichment (parallel, file-cached) ─────────────────────
+def enrich_with_filing_data(
+    df: pd.DataFrame, progress_bar=None
+) -> tuple[pd.DataFrame, int]:
+    """Enrich df with SEC .txt data. Returns (enriched_df, cache_hits)."""
     results: dict[str, dict] = {}
     pairs = [(r["Accession No"], r["CIK"]) for _, r in df.iterrows()
              if r["Accession No"] and r["CIK"]]
 
-    with ThreadPoolExecutor(max_workers=12) as ex:
-        fmap = {ex.submit(_fetch_filing_data, adsh, cik): adsh for adsh, cik in pairs}
-        for fut in as_completed(fmap):
-            results[fmap[fut]] = fut.result()
+    # Serve hits from persistent file cache without any HTTP requests
+    need_fetch = []
+    for adsh, cik in pairs:
+        if adsh in _filing_cache:
+            results[adsh] = _filing_cache[adsh]
+        else:
+            need_fetch.append((adsh, cik))
+
+    cache_hits = len(pairs) - len(need_fetch)
+    total      = len(pairs)
+
+    if need_fetch:
+        new_data: dict[str, dict] = {}
+        done = cache_hits
+
+        if progress_bar:
+            progress_bar.progress(
+                done / total if total else 1.0,
+                text=f"⚡ {cache_hits} cached · Fetching {len(need_fetch)} from SEC…",
+            )
+
+        with ThreadPoolExecutor(max_workers=50) as ex:
+            fmap = {ex.submit(_fetch_filing_data, adsh, cik): adsh
+                    for adsh, cik in need_fetch}
+            for fut in as_completed(fmap):
+                adsh   = fmap[fut]
+                result = fut.result()
+                results[adsh]  = result
+                new_data[adsh] = result
+                done += 1
+                if progress_bar:
+                    pct  = done / total if total else 1.0
+                    fetched = done - cache_hits
+                    progress_bar.progress(
+                        pct,
+                        text=f"Fetching from SEC… {fetched}/{len(need_fetch)}",
+                    )
+
+        # Persist new entries to the JSON file cache
+        _filing_cache.update(new_data)
+        _save_filing_cache(_filing_cache)
+
+    elif progress_bar:
+        progress_bar.progress(1.0, text=f"⚡ All {cache_hits} filings loaded from cache")
 
     df = df.copy()
     get = lambda a, k, d: results.get(a, {}).get(k, d)
-    df["Transaction Type"] = df["Accession No"].map(lambda a: get(a, "transaction_type", "⚪ Other"))
-    df["Exec Title"]       = df["Accession No"].map(lambda a: get(a, "exec_title",       "Director"))
-    df["Shares"]           = df["Accession No"].map(lambda a: get(a, "shares",           None))
-    df["Price Per Share"]  = df["Accession No"].map(lambda a: get(a, "price_per_share",  None))
-    df["Transaction Date"] = df["Accession No"].map(lambda a: get(a, "transaction_date", None))
-    return df
+    df["Transaction Type"] = df["Accession No"].map(
+        lambda a: get(a, "transaction_type", "⚪ Other"))
+    df["Exec Title"]       = df["Accession No"].map(
+        lambda a: get(a, "exec_title",       "Director"))
+    df["Shares"]           = df["Accession No"].map(
+        lambda a: get(a, "shares",           None))
+    df["Price Per Share"]  = df["Accession No"].map(
+        lambda a: get(a, "price_per_share",  None))
+    df["Transaction Date"] = df["Accession No"].map(
+        lambda a: get(a, "transaction_date", None))
+    return df, cache_hits
 
 
 # ── Phase 2: Market data enrichment (parallel) ────────────────────────────────
@@ -739,8 +822,9 @@ if df.empty:
     st.warning("No filings found for the selected date range.")
     st.stop()
 
-with st.spinner(f"Parsing transaction details for {len(df)} filings…"):
-    df = enrich_with_filing_data(df)
+_enrich_prog = st.progress(0, text="Checking filing cache…")
+df, _cache_hits = enrich_with_filing_data(df, progress_bar=_enrich_prog)
+_enrich_prog.empty()
 
 with st.spinner("Fetching market data (tickers, sectors, returns)…"):
     df = enrich_with_market_data(df)
@@ -1080,9 +1164,13 @@ with table_placeholder.container():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(table_html, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
+    _cache_note = (
+        f" &nbsp;·&nbsp; <span style='color:#854d0e;'>⚡ {_cache_hits}/{len(df)} from cache</span>"
+        if _cache_hits > 0 else ""
+    )
     st.markdown(
         f"<small style='color:#4b5563'>Returns from transaction date · "
-        f"Last fetched: {datetime.now().strftime('%H:%M:%S')}</small>",
+        f"Last fetched: {datetime.now().strftime('%H:%M:%S')}{_cache_note}</small>",
         unsafe_allow_html=True,
     )
 
