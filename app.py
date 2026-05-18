@@ -23,11 +23,78 @@ st.set_page_config(
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-.stApp { background-color: #0e1117; color: #fafafa; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* ── Global font ── */
+*, *::before, *::after {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+/* ── Animated gradient top border ── */
+@keyframes gradBorder {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
+}
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #3b82f6 0%, #8b5cf6 25%, #ec4899 50%, #f59e0b 75%, #3b82f6 100%);
+    background-size: 200% 100%;
+    animation: gradBorder 5s linear infinite;
+    z-index: 99999;
+    pointer-events: none;
+}
+
+/* ── Background with subtle dot grid ── */
+.stApp {
+    background-color: #0e1117;
+    color: #fafafa;
+    background-image: radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 28px 28px;
+}
+
+/* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background-color: #161b22;
-    border-right: 1px solid #21262d;
+    background-color: #111827;
+    border-right: 1px solid #1f2937;
+}
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+section[data-testid="stSidebar"] label {
+    text-transform: uppercase !important;
+    font-size: 10px !important;
+    letter-spacing: 0.1em !important;
+    color: #6b7280 !important;
+    font-weight: 600 !important;
+}
+
+/* ── Buttons ── */
+.stButton > button {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e4a76 100%) !important;
+    border: 1px solid #2d5a8e !important;
+    color: #bae6fd !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em !important;
+    transition: all 0.2s ease !important;
+}
+.stButton > button:hover {
+    background: linear-gradient(135deg, #1e4a76 0%, #1d5fa0 100%) !important;
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 16px rgba(56,189,248,0.3) !important;
+    color: #e0f2fe !important;
+}
+.stDownloadButton > button {
+    background: linear-gradient(135deg, #1e3a5f 0%, #1e4a76 100%) !important;
+    border: 1px solid #2d5a8e !important;
+    color: #bae6fd !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+.stDownloadButton > button:hover {
+    background: linear-gradient(135deg, #1e4a76 0%, #1d5fa0 100%) !important;
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 16px rgba(56,189,248,0.3) !important;
 }
 
 /* ── KPI Cards ── */
@@ -36,23 +103,49 @@ section[data-testid="stSidebar"] {
     flex: 1; min-width: 120px;
     background-color: #161b22;
     border: 1px solid #21262d;
+    border-top: none;
     border-radius: 10px;
     padding: 16px 20px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    border-radius: 10px 10px 0 0;
 }
 .kpi-card:hover {
-    border-color: #38bdf8;
-    box-shadow: 0 0 16px rgba(56,189,248,0.13);
+    border-color: #2d3748;
+    box-shadow: 0 0 20px rgba(56,189,248,0.12), inset 0 0 20px rgba(56,189,248,0.03);
 }
 .kpi-label {
-    color: #6b7280; font-size: 12px; font-weight: 500;
-    margin-bottom: 6px; letter-spacing: 0.02em;
+    color: #6b7280; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 8px;
 }
 .kpi-value {
-    color: #fafafa; font-size: 1.55rem; font-weight: 700;
-    font-variant-numeric: tabular-nums; line-height: 1.2;
+    color: #f1f5f9; font-size: 1.75rem; font-weight: 800;
+    font-variant-numeric: tabular-nums; line-height: 1.1;
+    letter-spacing: -0.02em;
 }
+.kpi-desc { color: #4b5563; font-size: 10.5px; margin-top: 5px; line-height: 1.4; }
 .kpi-subtext { color: #4b5563; font-size: 10px; margin-top: 4px; }
+
+/* ── Live pulse dot ── */
+@keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+    50%       { opacity: 0.85; box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+}
+.live-dot {
+    display: inline-block; width: 7px; height: 7px;
+    background: #22c55e; border-radius: 50%;
+    margin-right: 5px; vertical-align: middle;
+    animation: livePulse 2s ease-in-out infinite;
+}
 
 /* ── Skeleton shimmer ── */
 @keyframes shimmer {
@@ -95,13 +188,16 @@ section[data-testid="stSidebar"] {
     font-size: 12.5px; table-layout: fixed;
 }
 .filing-table th {
-    background-color: #1f2937; color: #60a5fa;
-    padding: 10px 10px; text-align: left;
-    border-bottom: 2px solid #374151; font-weight: 600;
-    letter-spacing: 0.03em; white-space: nowrap; overflow: hidden;
+    background-color: #161b22; color: #60a5fa;
+    padding: 11px 10px; text-align: left;
+    border-bottom: 1px solid #2d3748;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    white-space: nowrap; overflow: hidden;
+    position: sticky; top: 0; z-index: 1;
 }
 .filing-table td {
-    padding: 8px 10px; border-bottom: 1px solid #1f2937;
+    padding: 8px 10px; border-bottom: 1px solid #1a2332;
     vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
     transition: padding 0.15s ease, background-color 0.15s ease;
 }
@@ -116,23 +212,45 @@ section[data-testid="stSidebar"] {
 .filing-table .col-ret    { width: 155px; white-space: nowrap; }
 .filing-table .col-link   { width: 60px;  white-space: nowrap; }
 
+/* Alternating row shading */
+.filing-table tbody tr:nth-child(even) td { background-color: #0b1018; }
+.filing-table tbody tr:nth-child(odd)  td { background-color: #0e1117; }
+
 .filing-table tr:hover td {
-    background-color: #1a2332;
+    background-color: #1a2332 !important;
     padding-top: 11px; padding-bottom: 11px;
 }
 .filing-table tr:hover td:first-child { border-left: 3px solid #38bdf8; }
-.filing-table tr.notable td            { background-color: #162616; }
-.filing-table tr.notable td:first-child{ border-left: 3px solid #22c55e; }
+.filing-table tr.notable td { background-color: #0d1f0f !important; }
+.filing-table tr.notable td:first-child { border-left: 3px solid #22c55e; }
 .filing-table tr.notable:hover td:first-child { border-left: 3px solid #38bdf8; }
 .filing-table a { color: #38bdf8; text-decoration: none; font-weight: 500; }
 .filing-table a:hover { text-decoration: underline; }
+.exec-name { font-weight: 700; color: #f1f5f9; }
+.co-name   { color: #64748b; font-size: 12px; }
 
+/* ── Transaction type pills ── */
+.txn-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.txn-buy   { background: rgba(34,197,94,0.12);  color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+.txn-sell  { background: rgba(239,68,68,0.12);  color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+.txn-award { background: rgba(59,130,246,0.12); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+.txn-other { background: rgba(107,114,128,0.12);color: #9ca3af; border: 1px solid rgba(107,114,128,0.25); }
+
+/* ── Ticker pill ── */
 .ticker-pill {
-    display: inline-block; background-color: #1e1b4b; color: #a78bfa;
+    display: inline-block; background-color: rgba(139,92,246,0.15); color: #a78bfa;
+    border: 1px solid rgba(139,92,246,0.25);
     border-radius: 4px; padding: 1px 5px; font-size: 10px;
     font-weight: 700; letter-spacing: 0.05em;
     margin-left: 4px; vertical-align: middle;
 }
+
+/* ── Badges ── */
 .badge {
     display: inline-block; background-color: #1e3a5f; color: #60a5fa;
     border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 600;
@@ -156,11 +274,13 @@ section[data-testid="stSidebar"] {
 .st-toast.toast-show { opacity: 1; transform: translateX(0); }
 
 @media (prefers-reduced-motion: reduce) {
-    .stPlotlyChart { animation: none !important; }
-    .shimmer       { animation: none !important; }
-    #cursor-glow   { transition: none !important; display: none !important; }
-    .st-toast      { transition: none !important; }
-    .filing-table td { transition: none !important; }
+    body::before      { animation: none !important; }
+    .stPlotlyChart    { animation: none !important; }
+    .shimmer          { animation: none !important; }
+    #cursor-glow      { transition: none !important; display: none !important; }
+    .st-toast         { transition: none !important; }
+    .filing-table td  { transition: none !important; }
+    .live-dot         { animation: none !important; }
 }
 hr { border-color: #21262d; }
 h2 { color: #e2e8f0 !important; }
@@ -177,6 +297,12 @@ TRANSACTION_ORDER  = ["🟢 Buy", "🔴 Sell", "🔵 Award", "⚪ Other"]
 PIE_COLORS = {
     "🟢 Buy": "#22c55e", "🔴 Sell": "#ef4444",
     "🔵 Award": "#3b82f6", "⚪ Other": "#6b7280",
+}
+TXN_PILL_HTML = {
+    "🟢 Buy":   "<span class='txn-pill txn-buy'>Buy</span>",
+    "🔴 Sell":  "<span class='txn-pill txn-sell'>Sell</span>",
+    "🔵 Award": "<span class='txn-pill txn-award'>Award</span>",
+    "⚪ Other": "<span class='txn-pill txn-other'>Other</span>",
 }
 NOTABLE_RE  = _re.compile(r"\b(Chief|CEO|CFO|President)\b", _re.IGNORECASE)
 SEE_RMKS_RE = _re.compile(r"see\s+remarks", _re.IGNORECASE)
@@ -513,32 +639,46 @@ components.html("""
 </script>
 """, height=0)
 
+# ── Sidebar gradient divider helper ───────────────────────────────────────────
+_GRAD_DIV = (
+    '<div style="height:1px;background:linear-gradient(90deg,transparent,'
+    '#3b82f6 30%,#8b5cf6 70%,transparent);margin:12px 0;"></div>'
+)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── Sidebar part 1 ────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("## ⚙️ Filters")
-    st.markdown("---")
+    st.markdown(
+        "<div style='font-size:13px;font-weight:700;letter-spacing:0.08em;"
+        "color:#94a3b8;text-transform:uppercase;padding:4px 0 8px;'>⚙️ Filters</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     col_s, col_e = st.columns(2)
     with col_s:
-        start_date = st.date_input("Start date", value=date(2025, 1, 1))
+        start_date = st.date_input("📅 Start", value=date(2025, 1, 1))
     with col_e:
-        end_date = st.date_input("End date", value=date.today())
-    st.markdown("---")
-    refresh = st.button("🔄 Refresh data", use_container_width=True)
+        end_date = st.date_input("📅 End", value=date.today())
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
+    refresh = st.button("🔄 Refresh Data", use_container_width=True)
     if refresh:
         st.cache_data.clear()
         st.session_state["_refreshed"] = True
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
-    "<h1 style='font-size:2.2rem; font-weight:700; margin-bottom:4px;'>"
-    "📈 SEC Insider Trading Monitor"
+    "<h1 style='font-size:2.6rem;font-weight:800;margin-bottom:4px;line-height:1.15;'>"
+    "📈 <span style='background:linear-gradient(90deg,#ffffff 0%,#93c5fd 60%,#60a5fa 100%);"
+    "-webkit-background-clip:text;-webkit-text-fill-color:transparent;"
+    "background-clip:text;'>SEC Insider Trading Monitor</span>"
     "</h1>",
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<p style='color:#6b7280; margin-top:0;'>Real-time Form 4 filings · "
+    f"<p style='color:#6b7280;margin-top:0;font-size:13.5px;'>"
+    f"<span class='live-dot'></span>"
+    f"<span style='color:#4ade80;font-weight:600;'>Real-time</span> Form 4 filings &nbsp;·&nbsp; "
     f"{start_date.strftime('%b %d, %Y')} – {end_date.strftime('%b %d, %Y')}</p>",
     unsafe_allow_html=True,
 )
@@ -565,9 +705,9 @@ kpi_placeholder    = st.empty()
 charts_placeholder = st.empty()
 table_placeholder  = st.empty()
 
-kpi_placeholder.markdown(_SKEL_KPI,    unsafe_allow_html=True)
+kpi_placeholder.markdown(_SKEL_KPI,      unsafe_allow_html=True)
 charts_placeholder.markdown(_SKEL_CHARTS, unsafe_allow_html=True)
-table_placeholder.markdown(_SKEL_TABLE,  unsafe_allow_html=True)
+table_placeholder.markdown(_SKEL_TABLE,   unsafe_allow_html=True)
 
 # ── Fetch & enrich ────────────────────────────────────────────────────────────
 with st.spinner("Fetching filings from SEC EDGAR…"):
@@ -588,8 +728,9 @@ with st.spinner("Fetching market data (tickers, sectors, returns)…"):
 
 # ── Sidebar part 2 ────────────────────────────────────────────────────────────
 with st.sidebar:
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     txn_filter = st.multiselect(
-        "Transaction type", options=TRANSACTION_ORDER,
+        "🔀 Transaction Type", options=TRANSACTION_ORDER,
         default=[], placeholder="All types",
     )
 
@@ -599,7 +740,7 @@ with st.sidebar:
         for t in all_tickers
     }
     ticker_sel = st.selectbox(
-        "Filter by ticker",
+        "📈 Ticker",
         options=[""] + all_tickers,
         format_func=lambda x: "All tickers" if x == "" else ticker_label_map.get(x, x),
     )
@@ -607,17 +748,17 @@ with st.sidebar:
 
     all_companies = sorted(df["Company"].dropna().unique().tolist())
     company_sel = st.selectbox(
-        "Filter by company",
+        "🏢 Company",
         options=[""] + all_companies,
         format_func=lambda x: "All companies" if x == "" else x,
     )
     company_filter = company_sel or ""
 
-    location_filter = st.text_input("Filter by location", placeholder="e.g. CA, NY, TX")
+    location_filter = st.text_input("📍 Location", placeholder="e.g. CA, NY, TX")
 
-    st.markdown("---")
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     st.markdown(
-        "<small style='color:#6b7280'>Data: SEC EDGAR & Yahoo Finance.<br>"
+        "<small style='color:#4b5563'>Data: SEC EDGAR & Yahoo Finance.<br>"
         "Filings: 5 min · Filing data: 10 min · Market: 1 hr.</small>",
         unsafe_allow_html=True,
     )
@@ -679,28 +820,32 @@ _kpi_html = f"""
   <div class="kpi-card">
     <div class="kpi-label">Total Filings</div>
     <div class="kpi-value" data-target="{total}" data-type="int">0</div>
+    <div class="kpi-desc">Form 4 filings tracked</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Unique Companies</div>
     <div class="kpi-value" data-target="{companies}" data-type="int">0</div>
+    <div class="kpi-desc">Distinct issuers</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Buy / Sell Ratio</div>
     <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{"0" if _ratio_num else _ratio_display}</div>
-    <div class="kpi-subtext">{buys} buys · {sells} sells</div>
+    <div class="kpi-desc">{buys} buys · {sells} sells</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">🚨 Notable Buys</div>
     <div class="kpi-value" data-target="{notable_buys}" data-type="int">0</div>
-    <div class="kpi-subtext">CEO / CFO / Chief + Buy</div>
+    <div class="kpi-desc">CEO / CFO / Chief purchasing</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Latest Filing</div>
-    <div class="kpi-value" data-type="date" style="font-size:1.2rem; opacity:0;">{latest_str}</div>
+    <div class="kpi-value" data-type="date" style="font-size:1.25rem;opacity:0;">{latest_str}</div>
+    <div class="kpi-desc">Most recent submission</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Sectors Covered</div>
     <div class="kpi-value" data-target="{sectors_n}" data-type="int">0</div>
+    <div class="kpi-desc">Industries represented</div>
   </div>
 </div>
 """
@@ -755,7 +900,7 @@ components.html("""
 # ── Replace charts skeleton ───────────────────────────────────────────────────
 _base_layout = dict(
     margin=dict(l=0, r=0, t=10, b=0),
-    plot_bgcolor="#161b22", paper_bgcolor="#161b22", height=260,
+    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=260,
 )
 
 with charts_placeholder.container():
@@ -811,7 +956,7 @@ with charts_placeholder.container():
                      barmode="group", color_discrete_map=PIE_COLORS, template="plotly_dark")
         fig.update_layout(
             margin=dict(l=0, r=0, t=10, b=0),
-            plot_bgcolor="#161b22", paper_bgcolor="#161b22", height=280,
+            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=280,
             xaxis=dict(gridcolor="#1f2937"), yaxis=dict(gridcolor="#1f2937"),
             legend=dict(bgcolor="rgba(0,0,0,0)"),
         )
@@ -819,21 +964,26 @@ with charts_placeholder.container():
 
     st.markdown("---")
 
-# ── Build table HTML with sparkline data attributes ───────────────────────────
+# ── Build table HTML ──────────────────────────────────────────────────────────
 rows_html = ""
 for _, row in display.iterrows():
-    notable   = row.get("Notable", False)
-    tr_class  = "notable" if notable else ""
-    flag      = "🚨 " if notable else ""
-    url       = row["Filing URL"]
-    link      = f'<a href="{url}" target="_blank">🔗</a>' if url else "—"
-    ticker    = row.get("Ticker", "") or ""
+    notable    = row.get("Notable", False)
+    tr_class   = "notable" if notable else ""
+    flag       = "🚨 " if notable else ""
+    url        = row["Filing URL"]
+    link       = f'<a href="{url}" target="_blank">🔗</a>' if url else "—"
+    ticker     = row.get("Ticker", "") or ""
     ticker_html = f"<span class='ticker-pill'>{_html.escape(ticker)}</span>" if ticker else ""
-    sector    = row.get("Sector", "Unknown") or "Unknown"
+    sector     = row.get("Sector", "Unknown") or "Unknown"
     sector_lbl = sector if sector != "Unknown" else "—"
-    co_cell   = f"{_html.escape(row['Company'])}{ticker_html}"
 
-    # Sparkline + tooltip data attributes
+    txn_type   = row["Transaction Type"]
+    txn_cell   = TXN_PILL_HTML.get(
+        txn_type,
+        f"<span class='txn-pill txn-other'>{_html.escape(txn_type)}</span>"
+    )
+    co_cell    = f"<span class='co-name'>{_html.escape(row['Company'])}</span>{ticker_html}"
+
     _spark_key  = (ticker, row.get("Transaction Date") or str(row["Filed"].date())) if ticker else None
     _spark_json = json.dumps(spark_map.get(_spark_key, []))
     _est_val    = _fmt_value(row["Shares"], row["Price Per Share"])
@@ -846,8 +996,8 @@ for _, row in display.iterrows():
         f' data-est-value="{_html.escape(_est_val)}"'
         f' data-sec-url="{_html.escape(url)}">'
         f"<td class='col-date'>{row['Filed_str']}</td>"
-        f"<td class='col-txn'>{row['Transaction Type']}</td>"
-        f"<td class='col-exec'>{flag}<strong>{_html.escape(str(row['Executive / Filer']))}</strong></td>"
+        f"<td class='col-txn'>{txn_cell}</td>"
+        f"<td class='col-exec'>{flag}<span class='exec-name'>{_html.escape(str(row['Executive / Filer']))}</span></td>"
         f"<td class='col-title'>{_html.escape(str(row['Exec Title']))}</td>"
         f"<td class='col-co'>{co_cell}</td>"
         f"<td class='col-sector'>{_html.escape(sector_lbl)}</td>"
@@ -860,7 +1010,7 @@ for _, row in display.iterrows():
 
 table_html = f"""
 <div style="overflow-x:hidden; max-height:560px; overflow-y:auto;
-            border:1px solid #21262d; border-radius:10px; width:100%;">
+            border:1px solid #1f2937; border-radius:12px; width:100%;">
   <table class="filing-table">
     <colgroup>
       <col class="col-date">  <col class="col-txn">   <col class="col-exec">
@@ -912,7 +1062,7 @@ with table_placeholder.container():
     st.markdown(table_html, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(
-        f"<small style='color:#6b7280'>Returns from transaction date · "
+        f"<small style='color:#4b5563'>Returns from transaction date · "
         f"Last fetched: {datetime.now().strftime('%H:%M:%S')}</small>",
         unsafe_allow_html=True,
     )
@@ -981,7 +1131,7 @@ with table_placeholder.container():
             )
             fig_chart.update_layout(
                 template="plotly_dark",
-                plot_bgcolor="#161b22", paper_bgcolor="#161b22",
+                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                 margin=dict(l=0, r=0, t=30, b=0), height=320,
                 title=dict(text=f"{sel_ticker} — 30 days post-transaction", font=dict(size=14)),
                 xaxis=dict(showgrid=False),
@@ -990,28 +1140,44 @@ with table_placeholder.container():
             )
             st.plotly_chart(fig_chart, use_container_width=True)
 
-# ── Hover sparkline tooltip JS ────────────────────────────────────────────────
+# ── Hover sparkline tooltip JS (fixed: delayed hide + pointer-events + above row) ──
 components.html("""
 <script>
 (function() {
   var p  = window.parent ? window.parent : window;
   var pd = p.document;
+  var hideTimer = null;
 
+  // Build or reuse tooltip
   var tt = pd.getElementById('spark-tooltip');
   if (!tt) {
     tt = pd.createElement('div');
     tt.id = 'spark-tooltip';
     Object.assign(tt.style, {
-      position:'fixed', background:'#1e2530', border:'1px solid #374151',
-      borderLeft:'3px solid #38bdf8', borderRadius:'10px',
-      padding:'10px 14px', fontSize:'12px', color:'#f1f5f9',
-      zIndex:'99998', pointerEvents:'none',
-      opacity:'0', transition:'opacity 0.15s ease',
-      boxShadow:'0 8px 24px rgba(0,0,0,0.5)',
-      minWidth:'190px', maxWidth:'240px'
+      position:     'fixed',
+      background:   '#1a2235',
+      border:       '1px solid #2d3748',
+      borderLeft:   '3px solid #38bdf8',
+      borderRadius: '10px',
+      padding:      '10px 14px',
+      fontSize:     '12px',
+      color:        '#f1f5f9',
+      zIndex:       '99998',
+      pointerEvents:'auto',
+      opacity:      '0',
+      transition:   'opacity 0.15s ease',
+      boxShadow:    '0 12px 32px rgba(0,0,0,0.6)',
+      minWidth:     '190px',
+      maxWidth:     '240px'
     });
     pd.body.appendChild(tt);
   }
+
+  // Tooltip stays open when hovered — cancel pending hide
+  tt.addEventListener('mouseenter', function() { clearTimeout(hideTimer); });
+  tt.addEventListener('mouseleave', function() {
+    hideTimer = setTimeout(function() { tt.style.opacity = '0'; }, 150);
+  });
 
   function makeSpark(prices, w, h) {
     if (!prices || prices.length < 3) return '';
@@ -1022,45 +1188,57 @@ components.html("""
       var y = h - 4 - ((v - mn) / rng) * (h - 8);
       return x.toFixed(1) + ',' + y.toFixed(1);
     }).join(' ');
-    var clr = prices[prices.length - 1] >= prices[0] ? '#22c55e' : '#ef4444';
+    var clr = prices[prices.length - 1] >= prices[0] ? '#4ade80' : '#f87171';
     return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
            '" style="display:block;margin-bottom:8px;">' +
            '<polyline points="' + pts + '" fill="none" stroke="' + clr +
            '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
   }
 
+  function positionAboveRow(tr) {
+    var rect  = tr.getBoundingClientRect();
+    var vw    = p.innerWidth;
+    var ttH   = tt.offsetHeight || 165;
+    var top   = rect.top - ttH - 6;
+    if (top < 6) top = rect.bottom + 6;   // fallback: below row
+    var left  = rect.right - 220;
+    if (left < 6) left = 6;
+    if (left + 250 > vw) left = vw - 256;
+    tt.style.left = left + 'px';
+    tt.style.top  = top  + 'px';
+  }
+
   setTimeout(function() {
     pd.querySelectorAll('.filing-table tr[data-spark]').forEach(function(tr) {
       tr.addEventListener('mouseenter', function() {
+        clearTimeout(hideTimer);
+
         var prices;
         try { prices = JSON.parse(tr.getAttribute('data-spark')); } catch(e) { prices = []; }
-        var ticker    = tr.getAttribute('data-ticker') || '';
+        var ticker    = tr.getAttribute('data-ticker')     || '';
         var execTitle = tr.getAttribute('data-exec-title') || '—';
-        var estValue  = tr.getAttribute('data-est-value') || '—';
-        var secUrl    = tr.getAttribute('data-sec-url') || '';
+        var estValue  = tr.getAttribute('data-est-value')  || '—';
+        var secUrl    = tr.getAttribute('data-sec-url')    || '';
 
         var h = '';
         if (ticker) h += '<div style="font-weight:700;color:#a78bfa;margin-bottom:8px;font-size:13px;">' + ticker + ' — 30d</div>';
         h += makeSpark(prices, 180, 44);
         h += '<div style="color:#9ca3af;font-size:11px;line-height:1.9;">' +
              'Title:&nbsp;<span style="color:#e5e7eb;">' + execTitle + '</span><br>' +
-             'Value:&nbsp;<span style="color:#e5e7eb;">' + estValue + '</span></div>';
+             'Value:&nbsp;<span style="color:#e5e7eb;">' + estValue  + '</span></div>';
         if (secUrl) h += '<div style="margin-top:8px;"><a href="' + secUrl +
-          '" target="_blank" style="color:#38bdf8;font-size:11px;text-decoration:none;">View on SEC →</a></div>';
+          '" target="_blank" style="color:#38bdf8;font-size:11px;text-decoration:none;font-weight:600;">View on SEC →</a></div>';
 
         tt.innerHTML = h;
-        var rect = tr.getBoundingClientRect();
-        var vw = p.innerWidth, vh = p.innerHeight;
-        var left = rect.right - 210;
-        var top  = rect.top - 8;
-        if (left < 8) left = 8;
-        if (left + 250 > vw) left = vw - 258;
-        if (top + 170 > vh) top = rect.bottom - 175;
-        tt.style.left = left + 'px';
-        tt.style.top  = top + 'px';
+        tt.style.opacity = '0';          // reset before measuring
+        tt.style.display = 'block';
+        positionAboveRow(tr);
         tt.style.opacity = '1';
       });
-      tr.addEventListener('mouseleave', function() { tt.style.opacity = '0'; });
+
+      tr.addEventListener('mouseleave', function() {
+        hideTimer = setTimeout(function() { tt.style.opacity = '0'; }, 150);
+      });
     });
   }, 350);
 })();
