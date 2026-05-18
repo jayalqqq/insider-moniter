@@ -1,3 +1,5 @@
+import html as _html
+import json
 import re as _re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
@@ -7,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 import yfinance as yf
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -27,39 +30,81 @@ section[data-testid="stSidebar"] {
     border-right: 1px solid #21262d;
 }
 
-div[data-testid="metric-container"] {
+/* ── KPI Cards ── */
+.kpi-grid { display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.kpi-card {
+    flex: 1; min-width: 120px;
     background-color: #161b22;
     border: 1px solid #21262d;
     border-radius: 10px;
     padding: 16px 20px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.kpi-card:hover {
+    border-color: #38bdf8;
+    box-shadow: 0 0 16px rgba(56,189,248,0.13);
+}
+.kpi-label {
+    color: #6b7280; font-size: 12px; font-weight: 500;
+    margin-bottom: 6px; letter-spacing: 0.02em;
+}
+.kpi-value {
+    color: #fafafa; font-size: 1.55rem; font-weight: 700;
+    font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.kpi-subtext { color: #4b5563; font-size: 10px; margin-top: 4px; }
+
+/* ── Skeleton shimmer ── */
+@keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+}
+.shimmer {
+    background: linear-gradient(90deg, #1c2230 25%, #2a3441 50%, #1c2230 75%);
+    background-size: 1200px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 8px;
+}
+.skel-kpi-grid { display: flex; gap: 12px; margin-bottom: 8px; }
+.skel-kpi      { flex: 1; height: 80px; border-radius: 10px; }
+.skel-charts   { display: flex; gap: 12px; margin: 0 0 16px; }
+.skel-chart    { flex: 1; height: 260px; }
+.skel-table    { width: 100%; height: 380px; }
+
+/* ── Chart entry animation ── */
+@keyframes chartFadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.stPlotlyChart { animation: chartFadeIn 0.55s ease-out both; }
+
+/* ── Cursor glow ── */
+#cursor-glow {
+    position: fixed; width: 400px; height: 400px; border-radius: 50%;
+    background: radial-gradient(circle,
+        rgba(56,189,248,0.055) 0%, rgba(99,102,241,0.03) 45%, transparent 70%);
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+    z-index: 0; will-change: left, top;
+    transition: left 0.07s linear, top 0.07s linear;
 }
 
 /* ── Table ── */
 .filing-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-    table-layout: fixed;
+    width: 100%; border-collapse: collapse;
+    font-size: 12.5px; table-layout: fixed;
 }
 .filing-table th {
-    background-color: #1f2937;
-    color: #60a5fa;
-    padding: 10px 10px;
-    text-align: left;
-    border-bottom: 2px solid #374151;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-    overflow: hidden;
+    background-color: #1f2937; color: #60a5fa;
+    padding: 10px 10px; text-align: left;
+    border-bottom: 2px solid #374151; font-weight: 600;
+    letter-spacing: 0.03em; white-space: nowrap; overflow: hidden;
 }
 .filing-table td {
-    padding: 8px 10px;
-    border-bottom: 1px solid #1f2937;
-    vertical-align: middle;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    padding: 8px 10px; border-bottom: 1px solid #1f2937;
+    vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
+    transition: padding 0.15s ease, background-color 0.15s ease;
 }
-/* per-column widths tuned for 1440px with sidebar */
 .filing-table .col-date   { width: 90px;  white-space: nowrap; }
 .filing-table .col-txn    { width: 78px;  white-space: nowrap; }
 .filing-table .col-exec   { width: 150px; }
@@ -71,37 +116,52 @@ div[data-testid="metric-container"] {
 .filing-table .col-ret    { width: 155px; white-space: nowrap; }
 .filing-table .col-link   { width: 60px;  white-space: nowrap; }
 
-.filing-table tr:hover td  { background-color: #1a2332; }
-.filing-table tr.notable td { background-color: #162616; }
-.filing-table tr.notable td:first-child { border-left: 3px solid #22c55e; }
-
+.filing-table tr:hover td {
+    background-color: #1a2332;
+    padding-top: 11px; padding-bottom: 11px;
+}
+.filing-table tr:hover td:first-child { border-left: 3px solid #38bdf8; }
+.filing-table tr.notable td            { background-color: #162616; }
+.filing-table tr.notable td:first-child{ border-left: 3px solid #22c55e; }
+.filing-table tr.notable:hover td:first-child { border-left: 3px solid #38bdf8; }
 .filing-table a { color: #38bdf8; text-decoration: none; font-weight: 500; }
 .filing-table a:hover { text-decoration: underline; }
 
 .ticker-pill {
-    display: inline-block;
-    background-color: #1e1b4b;
-    color: #a78bfa;
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    margin-left: 4px;
-    vertical-align: middle;
+    display: inline-block; background-color: #1e1b4b; color: #a78bfa;
+    border-radius: 4px; padding: 1px 5px; font-size: 10px;
+    font-weight: 700; letter-spacing: 0.05em;
+    margin-left: 4px; vertical-align: middle;
 }
-
 .badge {
-    display: inline-block;
-    background-color: #1e3a5f;
-    color: #60a5fa;
-    border-radius: 12px;
-    padding: 2px 10px;
-    font-size: 11px;
-    font-weight: 600;
+    display: inline-block; background-color: #1e3a5f; color: #60a5fa;
+    border-radius: 12px; padding: 2px 10px; font-size: 11px; font-weight: 600;
 }
 .badge-alert { background-color: #422006; color: #fb923c; }
 
+/* ── Toast ── */
+#toast-container {
+    position: fixed; bottom: 28px; right: 28px;
+    z-index: 99999; display: flex; flex-direction: column;
+    gap: 8px; pointer-events: none;
+}
+.st-toast {
+    background: #1e2530; border: 1px solid #374151;
+    border-left: 3px solid #38bdf8; border-radius: 10px;
+    padding: 12px 18px; font-size: 13px; color: #f1f5f9;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 230px;
+    opacity: 0; transform: translateX(20px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.st-toast.toast-show { opacity: 1; transform: translateX(0); }
+
+@media (prefers-reduced-motion: reduce) {
+    .stPlotlyChart { animation: none !important; }
+    .shimmer       { animation: none !important; }
+    #cursor-glow   { transition: none !important; display: none !important; }
+    .st-toast      { transition: none !important; }
+    .filing-table td { transition: none !important; }
+}
 hr { border-color: #21262d; }
 h2 { color: #e2e8f0 !important; }
 </style>
@@ -118,8 +178,8 @@ PIE_COLORS = {
     "🟢 Buy": "#22c55e", "🔴 Sell": "#ef4444",
     "🔵 Award": "#3b82f6", "⚪ Other": "#6b7280",
 }
-NOTABLE_RE   = _re.compile(r"\b(Chief|CEO|CFO|President)\b", _re.IGNORECASE)
-SEE_RMKS_RE  = _re.compile(r"see\s+remarks", _re.IGNORECASE)
+NOTABLE_RE  = _re.compile(r"\b(Chief|CEO|CFO|President)\b", _re.IGNORECASE)
+SEE_RMKS_RE = _re.compile(r"see\s+remarks", _re.IGNORECASE)
 
 # ── Regex for SEC .txt parsing ────────────────────────────────────────────────
 _CIK_RE    = _re.compile(r"\s*\(CIK\s+\d+\)\s*$", _re.IGNORECASE)
@@ -173,14 +233,13 @@ def _build_txt_url(adsh: str, cik: str) -> str:
 
 
 def _resolve_title(raw: str) -> str:
-    """Return 'Director' if title is blank, 'See Remarks', or similar."""
     raw = raw.strip()
     if not raw or SEE_RMKS_RE.search(raw):
         return "Director"
     return raw
 
 
-# ── SEC .txt fetch — all fields in one request (TTL 10 min) ───────────────────
+# ── SEC .txt fetch (TTL 10 min) ───────────────────────────────────────────────
 @st.cache_data(ttl=600, show_spinner=False)
 def _fetch_filing_data(adsh: str, cik: str) -> dict:
     default = {
@@ -196,18 +255,15 @@ def _fetch_filing_data(adsh: str, cik: str) -> dict:
             return default
         text = resp.text
 
-        # ── Transaction code: scan ALL codes, prioritise P > S > A > others ──
         raw_codes = [c.strip() for c in _CODE_RE.findall(text)]
         for priority in ("P", "S", "A"):
             if priority in raw_codes:
                 default["transaction_type"] = TRANSACTION_LABELS[priority]
                 break
 
-        # ── Officer title with "See Remarks" fallback ─────────────────────────
         m = _TITLE_RE.search(text)
         default["exec_title"] = _resolve_title(m.group(1) if m else "")
 
-        # ── Shares & price ────────────────────────────────────────────────────
         m = _SHARES_RE.search(text)
         if m:
             try:
@@ -222,7 +278,6 @@ def _fetch_filing_data(adsh: str, cik: str) -> dict:
             except ValueError:
                 pass
 
-        # ── Transaction date ──────────────────────────────────────────────────
         m = _TDATE_RE.search(text)
         if m:
             default["transaction_date"] = m.group(1).strip()
@@ -232,7 +287,7 @@ def _fetch_filing_data(adsh: str, cik: str) -> dict:
         return default
 
 
-# ── Ticker + sector via Yahoo Finance search (TTL 1 hr) ───────────────────────
+# ── Ticker + sector via Yahoo Finance (TTL 1 hr) ──────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
     try:
@@ -250,13 +305,11 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
     return "", "Unknown"
 
 
-# ── Stock return calculation (TTL 1 hr) ───────────────────────────────────────
+# ── yfinance helpers ──────────────────────────────────────────────────────────
 def _history_with_fallback(ticker: str, start: str, end: str):
-    """Fetch yfinance history; if empty and ticker has an exchange suffix, retry without it."""
     hist = yf.Ticker(ticker).history(start=start, end=end)
     if hist.empty and "." in ticker:
-        base_ticker = ticker.split(".")[0]
-        hist = yf.Ticker(base_ticker).history(start=start, end=end)
+        hist = yf.Ticker(ticker.split(".")[0]).history(start=start, end=end)
     return hist
 
 
@@ -284,7 +337,6 @@ def _get_returns(ticker: str, base_date_str: str) -> tuple:
         return None, None, None
 
 
-# ── Stock chart data (TTL 1 hr) ───────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
 def _get_stock_chart_data(ticker: str, base_date_str: str) -> pd.DataFrame:
     try:
@@ -298,6 +350,20 @@ def _get_stock_chart_data(ticker: str, base_date_str: str) -> pd.DataFrame:
         return hist
     except Exception:
         return pd.DataFrame()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _get_sparkline_prices(ticker: str, ref_date_str: str) -> list:
+    """Last ≤30 closes ending at ref_date for the hover sparkline tooltip."""
+    try:
+        ref   = pd.to_datetime(ref_date_str).date()
+        start = ref - timedelta(days=50)
+        hist  = _history_with_fallback(ticker, str(start), str(ref + timedelta(days=1)))
+        if hist.empty:
+            return []
+        return [round(float(c), 2) for c in hist["Close"].tail(30).tolist()]
+    except Exception:
+        return []
 
 
 # ── EDGAR filing fetch (TTL 5 min) ────────────────────────────────────────────
@@ -387,7 +453,6 @@ def enrich_with_filing_data(df: pd.DataFrame) -> pd.DataFrame:
 def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
 
-    # Ticker + sector per unique company
     unique_cos  = df["Company"].dropna().unique().tolist()
     ticker_map: dict[str, str] = {}
     sector_map: dict[str, str] = {}
@@ -403,7 +468,6 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
     df["Ticker"] = df["Company"].map(ticker_map).fillna("")
     df["Sector"] = df["Company"].map(sector_map).fillna("Unknown")
 
-    # Returns for Buy rows only
     df["7d Return"] = df["30d Return"] = df["90d Return"] = None
 
     buy_mask = (df["Transaction Type"] == "🟢 Buy") & df["Ticker"].astype(bool)
@@ -430,8 +494,27 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# ── Cursor glow (injected once per page session) ──────────────────────────────
+components.html("""
+<script>
+(function() {
+  var p = window.parent;
+  if (!p || p === window) return;
+  if (p.document.getElementById('cursor-glow')) return;
+  var g = p.document.createElement('div');
+  g.id = 'cursor-glow';
+  p.document.body.appendChild(g);
+  if (p.matchMedia && p.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  p.document.addEventListener('mousemove', function(e) {
+    g.style.left = e.clientX + 'px';
+    g.style.top  = e.clientY + 'px';
+  });
+})();
+</script>
+""", height=0)
+
 # ══════════════════════════════════════════════════════════════════════════════
-# ── Sidebar part 1: Date range + refresh (before data fetch) ─────────────────
+# ── Sidebar part 1 ────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
     st.markdown("## ⚙️ Filters")
@@ -441,11 +524,11 @@ with st.sidebar:
         start_date = st.date_input("Start date", value=date(2025, 1, 1))
     with col_e:
         end_date = st.date_input("End date", value=date.today())
-
     st.markdown("---")
     refresh = st.button("🔄 Refresh data", use_container_width=True)
     if refresh:
         st.cache_data.clear()
+        st.session_state["_refreshed"] = True
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown(
@@ -461,12 +544,39 @@ st.markdown(
 )
 st.markdown("---")
 
+# ── Skeleton placeholders ─────────────────────────────────────────────────────
+_SKEL_KPI = """
+<div class="skel-kpi-grid">
+  <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
+  <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
+  <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
+</div>"""
+
+_SKEL_CHARTS = """
+<div class="skel-charts">
+  <div class="skel-chart shimmer"></div>
+  <div class="skel-chart shimmer"></div>
+  <div class="skel-chart shimmer"></div>
+</div>"""
+
+_SKEL_TABLE = '<div style="margin-top:16px;"><div class="skel-table shimmer"></div></div>'
+
+kpi_placeholder    = st.empty()
+charts_placeholder = st.empty()
+table_placeholder  = st.empty()
+
+kpi_placeholder.markdown(_SKEL_KPI,    unsafe_allow_html=True)
+charts_placeholder.markdown(_SKEL_CHARTS, unsafe_allow_html=True)
+table_placeholder.markdown(_SKEL_TABLE,  unsafe_allow_html=True)
 
 # ── Fetch & enrich ────────────────────────────────────────────────────────────
 with st.spinner("Fetching filings from SEC EDGAR…"):
     df = fetch_filings(str(start_date), str(end_date))
 
 if df.empty:
+    kpi_placeholder.empty()
+    charts_placeholder.empty()
+    table_placeholder.empty()
     st.warning("No filings found for the selected date range.")
     st.stop()
 
@@ -476,39 +586,33 @@ with st.spinner(f"Parsing transaction details for {len(df)} filings…"):
 with st.spinner("Fetching market data (tickers, sectors, returns)…"):
     df = enrich_with_market_data(df)
 
-
-# ── Sidebar part 2: Filter controls (populated from enriched data) ─────────────
+# ── Sidebar part 2 ────────────────────────────────────────────────────────────
 with st.sidebar:
     txn_filter = st.multiselect(
         "Transaction type", options=TRANSACTION_ORDER,
         default=[], placeholder="All types",
     )
 
-    # Ticker selectbox with autocomplete
     all_tickers = sorted(t for t in df["Ticker"].dropna().unique() if t)
     ticker_label_map = {
         t: f"{t} — {df[df['Ticker'] == t]['Company'].iloc[0][:28]}"
         for t in all_tickers
     }
-    ticker_options = [""] + all_tickers
     ticker_sel = st.selectbox(
         "Filter by ticker",
-        options=ticker_options,
+        options=[""] + all_tickers,
         format_func=lambda x: "All tickers" if x == "" else ticker_label_map.get(x, x),
     )
     ticker_filter = ticker_sel or ""
 
-    # Company selectbox with autocomplete
     all_companies = sorted(df["Company"].dropna().unique().tolist())
-    company_options = [""] + all_companies
     company_sel = st.selectbox(
         "Filter by company",
-        options=company_options,
+        options=[""] + all_companies,
         format_func=lambda x: "All companies" if x == "" else x,
     )
     company_filter = company_sel or ""
 
-    # Location text filter (kept as free-text — many distinct values)
     location_filter = st.text_input("Filter by location", placeholder="e.g. CA, NY, TX")
 
     st.markdown("---")
@@ -517,7 +621,6 @@ with st.sidebar:
         "Filings: 5 min · Filing data: 10 min · Market: 1 hr.</small>",
         unsafe_allow_html=True,
     )
-
 
 # ── Apply filters ─────────────────────────────────────────────────────────────
 filtered = df.copy()
@@ -532,15 +635,13 @@ if location_filter.strip():
         filtered["Location"].str.contains(location_filter.strip(), case=False, na=False)
     ]
 
-# Notable flag: Chief/CEO/CFO/President + Buy
 filtered = filtered.copy()
 filtered["Notable"] = (
     (filtered["Transaction Type"] == "🟢 Buy") &
     filtered["Exec Title"].apply(lambda t: bool(NOTABLE_RE.search(str(t))))
 )
 
-
-# ── KPI metrics ───────────────────────────────────────────────────────────────
+# ── KPI values ────────────────────────────────────────────────────────────────
 total        = len(filtered)
 companies    = filtered["Company"].nunique()
 latest       = filtered["Filed"].max()
@@ -548,144 +649,210 @@ latest_str   = latest.strftime("%b %d, %Y") if pd.notna(latest) else "—"
 buys         = (filtered["Transaction Type"] == "🟢 Buy").sum()
 sells        = (filtered["Transaction Type"] == "🔴 Sell").sum()
 notable_buys = filtered["Notable"].sum()
-ratio_str    = f"{buys/sells:.1f}:1" if sells > 0 else ("∞" if buys > 0 else "—")
 sectors_n    = filtered[filtered["Sector"] != "Unknown"]["Sector"].nunique()
 
-m1, m2, m3, m4, m5, m6 = st.columns(6)
-m1.metric("Total Filings",    f"{total:,}")
-m2.metric("Unique Companies", f"{companies:,}")
-m3.metric("Buy / Sell Ratio", ratio_str, help=f"{buys} buys · {sells} sells")
-m4.metric("🚨 Notable Buys",  f"{notable_buys:,}", help="CEO/CFO/Chief + Buy")
-m5.metric("Latest Filing",    latest_str)
-m6.metric("Sectors Covered",  str(sectors_n))
+_ratio_num     = round(buys / sells, 1) if sells > 0 else None
+_ratio_display = (
+    f"{_ratio_num}:1" if _ratio_num is not None else ("∞" if buys > 0 else "—")
+)
 
-st.markdown("---")
+# ── Sparkline pre-fetch for hover tooltips ────────────────────────────────────
+display = filtered.head(200).copy()
+display["Filed_str"] = display["Filed"].dt.strftime("%Y-%m-%d").fillna("—")
 
+_spark_pairs = list(dict.fromkeys(
+    (r["Ticker"], r["Transaction Date"] or str(r["Filed"].date()))
+    for _, r in display.iterrows()
+    if r.get("Ticker")
+))[:60]
 
-# ── Charts row 1 ─────────────────────────────────────────────────────────────
+spark_map: dict = {}
+if _spark_pairs:
+    with ThreadPoolExecutor(max_workers=8) as _sex:
+        _sfmap = {_sex.submit(_get_sparkline_prices, t, d): (t, d) for t, d in _spark_pairs}
+        for _sfut in as_completed(_sfmap):
+            spark_map[_sfmap[_sfut]] = _sfut.result()
+
+# ── Replace KPI skeleton ──────────────────────────────────────────────────────
+_kpi_html = f"""
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-label">Total Filings</div>
+    <div class="kpi-value" data-target="{total}" data-type="int">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Unique Companies</div>
+    <div class="kpi-value" data-target="{companies}" data-type="int">0</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Buy / Sell Ratio</div>
+    <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{"0" if _ratio_num else _ratio_display}</div>
+    <div class="kpi-subtext">{buys} buys · {sells} sells</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">🚨 Notable Buys</div>
+    <div class="kpi-value" data-target="{notable_buys}" data-type="int">0</div>
+    <div class="kpi-subtext">CEO / CFO / Chief + Buy</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Latest Filing</div>
+    <div class="kpi-value" data-type="date" style="font-size:1.2rem; opacity:0;">{latest_str}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-label">Sectors Covered</div>
+    <div class="kpi-value" data-target="{sectors_n}" data-type="int">0</div>
+  </div>
+</div>
+"""
+kpi_placeholder.markdown(_kpi_html, unsafe_allow_html=True)
+
+# ── Counter animation ─────────────────────────────────────────────────────────
+components.html("""
+<script>
+(function() {
+  var p  = window.parent ? window.parent : window;
+  var pd = p.document;
+  var reduced = p.matchMedia && p.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) {
+    pd.querySelectorAll('.kpi-value[data-type="date"]').forEach(function(el) {
+      el.style.opacity = '1';
+    });
+    return;
+  }
+  var DUR = 1500;
+  function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
+  setTimeout(function() {
+    pd.querySelectorAll('.kpi-value[data-type="int"]').forEach(function(el) {
+      var target = parseInt(el.dataset.target, 10);
+      if (isNaN(target)) return;
+      var t0 = p.performance.now();
+      (function tick(now) {
+        var prog = Math.min((now - t0) / DUR, 1);
+        el.textContent = Math.round(easeOut(prog) * target).toLocaleString();
+        if (prog < 1) p.requestAnimationFrame(tick);
+      })(p.performance.now());
+    });
+    pd.querySelectorAll('.kpi-value[data-type="ratio"]').forEach(function(el) {
+      var target = parseFloat(el.dataset.target);
+      var final  = el.dataset.final;
+      if (!target || isNaN(target)) return;
+      var t0 = p.performance.now();
+      (function tick(now) {
+        var prog = Math.min((now - t0) / DUR, 1);
+        el.textContent = prog < 1 ? (easeOut(prog) * target).toFixed(1) + ':1' : final;
+        if (prog < 1) p.requestAnimationFrame(tick);
+      })(p.performance.now());
+    });
+    pd.querySelectorAll('.kpi-value[data-type="date"]').forEach(function(el) {
+      el.style.transition = 'opacity 0.9s ease-out';
+      el.style.opacity = '1';
+    });
+  }, 120);
+})();
+</script>
+""", height=0)
+
+# ── Replace charts skeleton ───────────────────────────────────────────────────
 _base_layout = dict(
     margin=dict(l=0, r=0, t=10, b=0),
     plot_bgcolor="#161b22", paper_bgcolor="#161b22", height=260,
 )
 
-col_area, col_pie, col_bar = st.columns(3)
+with charts_placeholder.container():
+    col_area, col_pie, col_bar = st.columns(3)
 
-with col_area:
-    st.markdown("**Filings Over Time**")
-    daily = (
-        filtered.set_index("Filed").resample("D")["Accession No"]
-        .count().reset_index()
-        .rename(columns={"Filed": "Date", "Accession No": "Filings"})
-    )
-    fig = px.area(daily, x="Date", y="Filings",
-                  color_discrete_sequence=["#38bdf8"], template="plotly_dark")
-    fig.update_layout(**_base_layout,
-                      xaxis=dict(showgrid=False), yaxis=dict(gridcolor="#1f2937"))
-    st.plotly_chart(fig, use_container_width=True)
+    with col_area:
+        st.markdown("**Filings Over Time**")
+        daily = (
+            filtered.set_index("Filed").resample("D")["Accession No"]
+            .count().reset_index()
+            .rename(columns={"Filed": "Date", "Accession No": "Filings"})
+        )
+        fig = px.area(daily, x="Date", y="Filings",
+                      color_discrete_sequence=["#38bdf8"], template="plotly_dark")
+        fig.update_layout(**_base_layout,
+                          xaxis=dict(showgrid=False), yaxis=dict(gridcolor="#1f2937"))
+        st.plotly_chart(fig, use_container_width=True)
 
-with col_pie:
-    st.markdown("**Transaction Breakdown**")
-    txn_counts = (
-        filtered["Transaction Type"].value_counts()
-        .reindex(TRANSACTION_ORDER, fill_value=0).reset_index()
-    )
-    txn_counts.columns = ["Type", "Count"]
-    txn_counts = txn_counts[txn_counts["Count"] > 0]
-    fig = px.pie(txn_counts, names="Type", values="Count", color="Type",
-                 color_discrete_map=PIE_COLORS, template="plotly_dark", hole=0.45)
-    fig.update_traces(textposition="outside", textinfo="percent+label")
-    fig.update_layout(**_base_layout, showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    with col_pie:
+        st.markdown("**Transaction Breakdown**")
+        txn_counts = (
+            filtered["Transaction Type"].value_counts()
+            .reindex(TRANSACTION_ORDER, fill_value=0).reset_index()
+        )
+        txn_counts.columns = ["Type", "Count"]
+        txn_counts = txn_counts[txn_counts["Count"] > 0]
+        fig = px.pie(txn_counts, names="Type", values="Count", color="Type",
+                     color_discrete_map=PIE_COLORS, template="plotly_dark", hole=0.45)
+        fig.update_traces(textposition="outside", textinfo="percent+label")
+        fig.update_layout(**_base_layout, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-with col_bar:
-    st.markdown("**Top 10 Locations**")
-    top_locs = filtered["Location"].value_counts().head(10).reset_index()
-    top_locs.columns = ["Location", "Filings"]
-    fig = px.bar(top_locs, x="Filings", y="Location", orientation="h",
-                 color="Filings", color_continuous_scale="Blues", template="plotly_dark")
-    fig.update_layout(**_base_layout,
-                      yaxis=dict(autorange="reversed", showgrid=False),
-                      xaxis=dict(gridcolor="#1f2937"), coloraxis_showscale=False)
-    st.plotly_chart(fig, use_container_width=True)
+    with col_bar:
+        st.markdown("**Top 10 Locations**")
+        top_locs = filtered["Location"].value_counts().head(10).reset_index()
+        top_locs.columns = ["Location", "Filings"]
+        fig = px.bar(top_locs, x="Filings", y="Location", orientation="h",
+                     color="Filings", color_continuous_scale="Blues", template="plotly_dark")
+        fig.update_layout(**_base_layout,
+                          yaxis=dict(autorange="reversed", showgrid=False),
+                          xaxis=dict(gridcolor="#1f2937"), coloraxis_showscale=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-# ── Charts row 2: Sector breakdown ────────────────────────────────────────────
-sector_df = filtered[
-    filtered["Sector"].notna() &
-    (filtered["Sector"] != "Unknown") &
-    filtered["Transaction Type"].isin(["🟢 Buy", "🔴 Sell"])
-]
-if not sector_df.empty:
-    st.markdown("**Insider Activity by Sector**")
-    sc = sector_df.groupby(["Sector", "Transaction Type"]).size().reset_index(name="Count")
-    fig = px.bar(sc, x="Sector", y="Count", color="Transaction Type",
-                 barmode="group", color_discrete_map=PIE_COLORS, template="plotly_dark")
-    fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
-        plot_bgcolor="#161b22", paper_bgcolor="#161b22", height=280,
-        xaxis=dict(gridcolor="#1f2937"), yaxis=dict(gridcolor="#1f2937"),
-        legend=dict(bgcolor="rgba(0,0,0,0)"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-st.markdown("---")
-
-
-# ── Table controls ────────────────────────────────────────────────────────────
-tbl_left, tbl_right = st.columns([3, 1])
-with tbl_left:
-    badge_html = f"<span class='badge'>{total} results</span>"
-    if notable_buys:
-        badge_html += f" &nbsp;<span class='badge badge-alert'>🚨 {notable_buys} notable</span>"
-    st.markdown(f"**Recent Form 4 Filings** &nbsp; {badge_html}", unsafe_allow_html=True)
-
-with tbl_right:
-    export_cols = [
-        "Filed", "Transaction Type", "Exec Title", "Executive / Filer",
-        "Company", "Ticker", "Sector", "Shares", "Price Per Share",
-        "7d Return", "30d Return", "90d Return", "Location", "Filing URL",
+    sector_df = filtered[
+        filtered["Sector"].notna() &
+        (filtered["Sector"] != "Unknown") &
+        filtered["Transaction Type"].isin(["🟢 Buy", "🔴 Sell"])
     ]
-    export_df = filtered[export_cols].copy()
-    export_df["Filed"] = export_df["Filed"].dt.strftime("%Y-%m-%d")
-    st.download_button(
-        "⬇ Download CSV", export_df.to_csv(index=False),
-        file_name="insider_trades.csv", mime="text/csv",
-        use_container_width=True,
-    )
+    if not sector_df.empty:
+        st.markdown("**Insider Activity by Sector**")
+        sc = sector_df.groupby(["Sector", "Transaction Type"]).size().reset_index(name="Count")
+        fig = px.bar(sc, x="Sector", y="Count", color="Transaction Type",
+                     barmode="group", color_discrete_map=PIE_COLORS, template="plotly_dark")
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=10, b=0),
+            plot_bgcolor="#161b22", paper_bgcolor="#161b22", height=280,
+            xaxis=dict(gridcolor="#1f2937"), yaxis=dict(gridcolor="#1f2937"),
+            legend=dict(bgcolor="rgba(0,0,0,0)"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("---")
 
-
-# ── Filing table ──────────────────────────────────────────────────────────────
-display = filtered.head(200).copy()
-display["Filed_str"] = display["Filed"].dt.strftime("%Y-%m-%d").fillna("—")
-
+# ── Build table HTML with sparkline data attributes ───────────────────────────
 rows_html = ""
 for _, row in display.iterrows():
-    notable  = row.get("Notable", False)
-    tr_class = "notable" if notable else ""
-    flag     = "🚨 " if notable else ""
-    url      = row["Filing URL"]
-    link     = f'<a href="{url}" target="_blank">🔗</a>' if url else "—"
-
-    ticker   = row.get("Ticker", "") or ""
-    ticker_html = f"<span class='ticker-pill'>{ticker}</span>" if ticker else ""
-
-    sector   = row.get("Sector", "Unknown") or "Unknown"
+    notable   = row.get("Notable", False)
+    tr_class  = "notable" if notable else ""
+    flag      = "🚨 " if notable else ""
+    url       = row["Filing URL"]
+    link      = f'<a href="{url}" target="_blank">🔗</a>' if url else "—"
+    ticker    = row.get("Ticker", "") or ""
+    ticker_html = f"<span class='ticker-pill'>{_html.escape(ticker)}</span>" if ticker else ""
+    sector    = row.get("Sector", "Unknown") or "Unknown"
     sector_lbl = sector if sector != "Unknown" else "—"
+    co_cell   = f"{_html.escape(row['Company'])}{ticker_html}"
 
-    # Company + ticker merged cell
-    co_cell = f"{row['Company']}{ticker_html}"
+    # Sparkline + tooltip data attributes
+    _spark_key  = (ticker, row.get("Transaction Date") or str(row["Filed"].date())) if ticker else None
+    _spark_json = json.dumps(spark_map.get(_spark_key, []))
+    _est_val    = _fmt_value(row["Shares"], row["Price Per Share"])
 
     rows_html += (
-        f'<tr class="{tr_class}">'
+        f'<tr class="{tr_class}"'
+        f' data-spark=\'{_spark_json}\''
+        f' data-ticker="{_html.escape(ticker)}"'
+        f' data-exec-title="{_html.escape(str(row["Exec Title"]))}"'
+        f' data-est-value="{_html.escape(_est_val)}"'
+        f' data-sec-url="{_html.escape(url)}">'
         f"<td class='col-date'>{row['Filed_str']}</td>"
         f"<td class='col-txn'>{row['Transaction Type']}</td>"
-        f"<td class='col-exec'>{flag}<strong>{row['Executive / Filer']}</strong></td>"
-        f"<td class='col-title'>{row['Exec Title']}</td>"
+        f"<td class='col-exec'>{flag}<strong>{_html.escape(str(row['Executive / Filer']))}</strong></td>"
+        f"<td class='col-title'>{_html.escape(str(row['Exec Title']))}</td>"
         f"<td class='col-co'>{co_cell}</td>"
-        f"<td class='col-sector'>{sector_lbl}</td>"
+        f"<td class='col-sector'>{_html.escape(sector_lbl)}</td>"
         f"<td class='col-shares'>{_fmt_shares(row['Shares'])}</td>"
-        f"<td class='col-value'>{_fmt_value(row['Shares'], row['Price Per Share'])}</td>"
+        f"<td class='col-value'>{_est_val}</td>"
         f"<td class='col-ret'>{_fmt_returns(row['7d Return'], row['30d Return'], row['90d Return'])}</td>"
         f"<td class='col-link'>{link}</td>"
         f"</tr>"
@@ -717,86 +884,222 @@ table_html = f"""
   </table>
 </div>
 """
-st.markdown(table_html, unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
-st.markdown(
-    f"<small style='color:#6b7280'>Returns from transaction date · "
-    f"Last fetched: {datetime.now().strftime('%H:%M:%S')}</small>",
-    unsafe_allow_html=True,
-)
+# ── Replace table skeleton ────────────────────────────────────────────────────
+with table_placeholder.container():
+    tbl_left, tbl_right = st.columns([3, 1])
+    with tbl_left:
+        badge_html = f"<span class='badge'>{total} results</span>"
+        if notable_buys:
+            badge_html += f" &nbsp;<span class='badge badge-alert'>🚨 {notable_buys} notable</span>"
+        st.markdown(f"**Recent Form 4 Filings** &nbsp; {badge_html}", unsafe_allow_html=True)
 
+    with tbl_right:
+        export_cols = [
+            "Filed", "Transaction Type", "Exec Title", "Executive / Filer",
+            "Company", "Ticker", "Sector", "Shares", "Price Per Share",
+            "7d Return", "30d Return", "90d Return", "Location", "Filing URL",
+        ]
+        export_df = filtered[export_cols].copy()
+        export_df["Filed"] = export_df["Filed"].dt.strftime("%Y-%m-%d")
+        st.download_button(
+            "⬇ Download CSV", export_df.to_csv(index=False),
+            file_name="insider_trades.csv", mime="text/csv",
+            use_container_width=True,
+        )
 
-# ── Returns summary ───────────────────────────────────────────────────────────
-buy_rows    = filtered[filtered["Transaction Type"] == "🟢 Buy"]
-has_returns = buy_rows[["7d Return", "30d Return", "90d Return"]].notna().any().any()
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(table_html, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        f"<small style='color:#6b7280'>Returns from transaction date · "
+        f"Last fetched: {datetime.now().strftime('%H:%M:%S')}</small>",
+        unsafe_allow_html=True,
+    )
 
-if has_returns:
+    # ── Returns summary ───────────────────────────────────────────────────────
+    buy_rows    = filtered[filtered["Transaction Type"] == "🟢 Buy"]
+    has_returns = buy_rows[["7d Return", "30d Return", "90d Return"]].notna().any().any()
+
+    if has_returns:
+        st.markdown("---")
+        st.markdown("**📊 Historical Performance — Buy Transactions**")
+
+        def _kpi_ret(label, val):
+            if val is None or (isinstance(val, float) and pd.isna(val)):
+                return f"**{label}:** —"
+            color = "#22c55e" if val >= 0 else "#ef4444"
+            sign  = "+" if val >= 0 else ""
+            return f"**{label}:** <span style='color:{color}'>{sign}{val:.2f}%</span>"
+
+        ra, rb, rc = st.columns(3)
+        ra.markdown(_kpi_ret("Avg 7-day",  buy_rows["7d Return"].mean()),  unsafe_allow_html=True)
+        rb.markdown(_kpi_ret("Avg 30-day", buy_rows["30d Return"].mean()), unsafe_allow_html=True)
+        rc.markdown(_kpi_ret("Avg 90-day", buy_rows["90d Return"].mean()), unsafe_allow_html=True)
+
+    # ── Stock Price Explorer ──────────────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**📊 Historical Performance — Buy Transactions**")
+    st.markdown("**📉 Stock Price Explorer** — 30 days post-transaction")
 
-    def _kpi_ret(label, val):
-        if val is None or (isinstance(val, float) and pd.isna(val)):
-            return f"**{label}:** —"
-        color = "#22c55e" if val >= 0 else "#ef4444"
-        sign  = "+" if val >= 0 else ""
-        return f"**{label}:** <span style='color:{color}'>{sign}{val:.2f}%</span>"
+    chart_df = filtered[filtered["Ticker"].astype(bool)][
+        ["Company", "Ticker", "Transaction Date", "Filed"]
+    ].copy()
+    chart_df["Label"] = (
+        chart_df["Company"].str[:32] + " (" + chart_df["Ticker"] + ") — " +
+        chart_df["Transaction Date"].fillna(chart_df["Filed"].dt.strftime("%Y-%m-%d"))
+    )
 
-    ra, rb, rc = st.columns(3)
-    ra.markdown(_kpi_ret("Avg 7-day",  buy_rows["7d Return"].mean()),  unsafe_allow_html=True)
-    rb.markdown(_kpi_ret("Avg 30-day", buy_rows["30d Return"].mean()), unsafe_allow_html=True)
-    rc.markdown(_kpi_ret("Avg 90-day", buy_rows["90d Return"].mean()), unsafe_allow_html=True)
-
-
-# ── Stock Price Explorer ──────────────────────────────────────────────────────
-st.markdown("---")
-st.markdown("**📉 Stock Price Explorer** — 30 days post-transaction")
-
-chart_df = filtered[filtered["Ticker"].astype(bool)][
-    ["Company", "Ticker", "Transaction Date", "Filed"]
-].copy()
-chart_df["Label"] = (
-    chart_df["Company"].str[:32] + " (" + chart_df["Ticker"] + ") — " +
-    chart_df["Transaction Date"].fillna(chart_df["Filed"].dt.strftime("%Y-%m-%d"))
-)
-
-if chart_df.empty:
-    st.info("No tickers resolved for the current filter — try a broader date range.")
-else:
-    selected = st.selectbox("Select a filing", options=chart_df["Label"].tolist(), index=0)
-    sel      = chart_df[chart_df["Label"] == selected].iloc[0]
-    sel_ticker = sel["Ticker"]
-    sel_date   = sel["Transaction Date"] or str(sel["Filed"].date())
-
-    with st.spinner(f"Loading {sel_ticker} chart…"):
-        chart_data = _get_stock_chart_data(sel_ticker, sel_date)
-
-    if chart_data.empty:
-        st.warning(f"No price data for {sel_ticker} from {sel_date}.")
+    if chart_df.empty:
+        st.info("No tickers resolved for the current filter — try a broader date range.")
     else:
-        base_price = chart_data["Close"].iloc[0]
-        fig_chart  = go.Figure()
-        fig_chart.add_trace(go.Scatter(
-            x=chart_data["Date"], y=chart_data["Close"],
-            mode="lines+markers", line=dict(color="#38bdf8", width=2),
-            marker=dict(size=4), name=sel_ticker,
-        ))
-        fig_chart.add_vline(
-            x=int(pd.to_datetime(sel_date).timestamp() * 1000),
-            line_dash="dash", line_color="#f59e0b",
-            annotation_text="Transaction date", annotation_font_color="#f59e0b",
-        )
-        fig_chart.add_hline(
-            y=base_price, line_dash="dot", line_color="#6b7280",
-            annotation_text=f"Entry ${base_price:.2f}", annotation_font_color="#6b7280",
-        )
-        fig_chart.update_layout(
-            template="plotly_dark",
-            plot_bgcolor="#161b22", paper_bgcolor="#161b22",
-            margin=dict(l=0, r=0, t=30, b=0), height=320,
-            title=dict(text=f"{sel_ticker} — 30 days post-transaction", font=dict(size=14)),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(gridcolor="#1f2937", tickprefix="$"),
-            showlegend=False,
-        )
-        st.plotly_chart(fig_chart, use_container_width=True)
+        selected = st.selectbox("Select a filing", options=chart_df["Label"].tolist(), index=0)
+        sel      = chart_df[chart_df["Label"] == selected].iloc[0]
+        sel_ticker = sel["Ticker"]
+        sel_date   = sel["Transaction Date"] or str(sel["Filed"].date())
+
+        with st.spinner(f"Loading {sel_ticker} chart…"):
+            chart_data = _get_stock_chart_data(sel_ticker, sel_date)
+
+        if chart_data.empty:
+            st.warning(f"No price data for {sel_ticker} from {sel_date}.")
+        else:
+            base_price = chart_data["Close"].iloc[0]
+            fig_chart  = go.Figure()
+            fig_chart.add_trace(go.Scatter(
+                x=chart_data["Date"], y=chart_data["Close"],
+                mode="lines+markers", line=dict(color="#38bdf8", width=2),
+                marker=dict(size=4), name=sel_ticker,
+            ))
+            fig_chart.add_vline(
+                x=int(pd.to_datetime(sel_date).timestamp() * 1000),
+                line_dash="dash", line_color="#f59e0b",
+                annotation_text="Transaction date", annotation_font_color="#f59e0b",
+            )
+            fig_chart.add_hline(
+                y=base_price, line_dash="dot", line_color="#6b7280",
+                annotation_text=f"Entry ${base_price:.2f}", annotation_font_color="#6b7280",
+            )
+            fig_chart.update_layout(
+                template="plotly_dark",
+                plot_bgcolor="#161b22", paper_bgcolor="#161b22",
+                margin=dict(l=0, r=0, t=30, b=0), height=320,
+                title=dict(text=f"{sel_ticker} — 30 days post-transaction", font=dict(size=14)),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(gridcolor="#1f2937", tickprefix="$"),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_chart, use_container_width=True)
+
+# ── Hover sparkline tooltip JS ────────────────────────────────────────────────
+components.html("""
+<script>
+(function() {
+  var p  = window.parent ? window.parent : window;
+  var pd = p.document;
+
+  var tt = pd.getElementById('spark-tooltip');
+  if (!tt) {
+    tt = pd.createElement('div');
+    tt.id = 'spark-tooltip';
+    Object.assign(tt.style, {
+      position:'fixed', background:'#1e2530', border:'1px solid #374151',
+      borderLeft:'3px solid #38bdf8', borderRadius:'10px',
+      padding:'10px 14px', fontSize:'12px', color:'#f1f5f9',
+      zIndex:'99998', pointerEvents:'none',
+      opacity:'0', transition:'opacity 0.15s ease',
+      boxShadow:'0 8px 24px rgba(0,0,0,0.5)',
+      minWidth:'190px', maxWidth:'240px'
+    });
+    pd.body.appendChild(tt);
+  }
+
+  function makeSpark(prices, w, h) {
+    if (!prices || prices.length < 3) return '';
+    var mn = Math.min.apply(null, prices), mx = Math.max.apply(null, prices);
+    var rng = mx - mn || 1;
+    var pts = prices.map(function(v, i) {
+      var x = (i / (prices.length - 1)) * w;
+      var y = h - 4 - ((v - mn) / rng) * (h - 8);
+      return x.toFixed(1) + ',' + y.toFixed(1);
+    }).join(' ');
+    var clr = prices[prices.length - 1] >= prices[0] ? '#22c55e' : '#ef4444';
+    return '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h +
+           '" style="display:block;margin-bottom:8px;">' +
+           '<polyline points="' + pts + '" fill="none" stroke="' + clr +
+           '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+  }
+
+  setTimeout(function() {
+    pd.querySelectorAll('.filing-table tr[data-spark]').forEach(function(tr) {
+      tr.addEventListener('mouseenter', function() {
+        var prices;
+        try { prices = JSON.parse(tr.getAttribute('data-spark')); } catch(e) { prices = []; }
+        var ticker    = tr.getAttribute('data-ticker') || '';
+        var execTitle = tr.getAttribute('data-exec-title') || '—';
+        var estValue  = tr.getAttribute('data-est-value') || '—';
+        var secUrl    = tr.getAttribute('data-sec-url') || '';
+
+        var h = '';
+        if (ticker) h += '<div style="font-weight:700;color:#a78bfa;margin-bottom:8px;font-size:13px;">' + ticker + ' — 30d</div>';
+        h += makeSpark(prices, 180, 44);
+        h += '<div style="color:#9ca3af;font-size:11px;line-height:1.9;">' +
+             'Title:&nbsp;<span style="color:#e5e7eb;">' + execTitle + '</span><br>' +
+             'Value:&nbsp;<span style="color:#e5e7eb;">' + estValue + '</span></div>';
+        if (secUrl) h += '<div style="margin-top:8px;"><a href="' + secUrl +
+          '" target="_blank" style="color:#38bdf8;font-size:11px;text-decoration:none;">View on SEC →</a></div>';
+
+        tt.innerHTML = h;
+        var rect = tr.getBoundingClientRect();
+        var vw = p.innerWidth, vh = p.innerHeight;
+        var left = rect.right - 210;
+        var top  = rect.top - 8;
+        if (left < 8) left = 8;
+        if (left + 250 > vw) left = vw - 258;
+        if (top + 170 > vh) top = rect.bottom - 175;
+        tt.style.left = left + 'px';
+        tt.style.top  = top + 'px';
+        tt.style.opacity = '1';
+      });
+      tr.addEventListener('mouseleave', function() { tt.style.opacity = '0'; });
+    });
+  }, 350);
+})();
+</script>
+""", height=0)
+
+# ── Toast: data refreshed ─────────────────────────────────────────────────────
+if st.session_state.get("_refreshed"):
+    del st.session_state["_refreshed"]
+    components.html("""
+<script>
+(function() {
+  var p  = window.parent ? window.parent : window;
+  var pd = p.document;
+  if (p.matchMedia && p.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  var container = pd.getElementById('toast-container');
+  if (!container) {
+    container = pd.createElement('div');
+    container.id = 'toast-container';
+    pd.body.appendChild(container);
+  }
+
+  var t = pd.createElement('div');
+  t.className = 'st-toast';
+  t.style.borderLeftColor = '#22c55e';
+  t.textContent = '✅ Data refreshed!';
+  container.appendChild(t);
+
+  p.requestAnimationFrame(function() {
+    p.requestAnimationFrame(function() { t.classList.add('toast-show'); });
+  });
+
+  setTimeout(function() {
+    t.classList.remove('toast-show');
+    setTimeout(function() {
+      if (container.contains(t)) container.removeChild(t);
+    }, 400);
+  }, 3500);
+})();
+</script>
+""", height=0)
