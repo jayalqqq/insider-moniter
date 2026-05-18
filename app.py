@@ -257,6 +257,25 @@ section[data-testid="stSidebar"] label {
 }
 .badge-alert { background-color: #422006; color: #fb923c; }
 
+/* ── SEC filing link button ── */
+.filing-link-btn {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid rgba(56,189,248,0.4);
+    border-radius: 999px;
+    color: #38bdf8 !important;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+    text-decoration: none !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+    white-space: nowrap;
+}
+.filing-link-btn:hover {
+    border-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56,189,248,0.35);
+    text-decoration: none !important;
+}
+.filing-link-btn:active { transform: scale(0.92); }
+
 /* ── Toast ── */
 #toast-container {
     position: fixed; bottom: 28px; right: 28px;
@@ -971,7 +990,7 @@ for _, row in display.iterrows():
     tr_class   = "notable" if notable else ""
     flag       = "🚨 " if notable else ""
     url        = row["Filing URL"]
-    link       = f'<a href="{url}" target="_blank">🔗</a>' if url else "—"
+    link       = f'<a href="{url}" target="_blank" rel="noopener noreferrer" class="filing-link-btn">SEC</a>' if url else "—"
     ticker     = row.get("Ticker", "") or ""
     ticker_html = f"<span class='ticker-pill'>{_html.escape(ticker)}</span>" if ticker else ""
     sector     = row.get("Sector", "Unknown") or "Unknown"
@@ -1218,7 +1237,6 @@ components.html("""
         var ticker    = tr.getAttribute('data-ticker')     || '';
         var execTitle = tr.getAttribute('data-exec-title') || '—';
         var estValue  = tr.getAttribute('data-est-value')  || '—';
-        var secUrl    = tr.getAttribute('data-sec-url')    || '';
 
         var h = '';
         if (ticker) h += '<div style="font-weight:700;color:#a78bfa;margin-bottom:8px;font-size:13px;">' + ticker + ' — 30d</div>';
@@ -1226,8 +1244,6 @@ components.html("""
         h += '<div style="color:#9ca3af;font-size:11px;line-height:1.9;">' +
              'Title:&nbsp;<span style="color:#e5e7eb;">' + execTitle + '</span><br>' +
              'Value:&nbsp;<span style="color:#e5e7eb;">' + estValue  + '</span></div>';
-        if (secUrl) h += '<div style="margin-top:8px;"><a href="' + secUrl +
-          '" target="_blank" style="color:#38bdf8;font-size:11px;text-decoration:none;font-weight:600;">View on SEC →</a></div>';
 
         tt.innerHTML = h;
         tt.style.opacity = '0';          // reset before measuring
