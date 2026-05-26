@@ -759,9 +759,21 @@ with st.sidebar:
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     col_s, col_e = st.columns(2)
     with col_s:
-        start_date = st.date_input("📅 Start", value=date(2025, 1, 1))
+        start_date = st.date_input(
+            "📅 Start",
+            value=date(2025, 1, 1),
+            max_value=date.today(),
+            key="start_date",
+            on_change=fetch_filings.clear,
+        )
     with col_e:
-        end_date = st.date_input("📅 End", value=date.today())
+        end_date = st.date_input(
+            "📅 End",
+            value=date.today(),
+            max_value=date.today(),
+            key="end_date",
+            on_change=fetch_filings.clear,
+        )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     refresh = st.button("🔄 Refresh Data", use_container_width=True)
     if refresh:
