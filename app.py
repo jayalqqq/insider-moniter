@@ -469,6 +469,17 @@ def _fetch_filing_data(adsh: str, cik: str) -> dict:
 
 # ── Ticker + sector via Yahoo Finance (TTL 1 hr) ──────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
+def _get_yf_sector(symbol: str) -> str:
+    """Get sector from yfinance .info with a hard 10-second timeout."""
+    try:
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            info = ex.submit(lambda: yf.Ticker(symbol).info).result(timeout=10)
+        return info.get("sector", "") or "Unknown"
+    except Exception:
+        return "Unknown"
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
 def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
     try:
         url = (
@@ -478,8 +489,12 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
         resp   = _session.get(url, timeout=8)
         quotes = resp.json().get("quotes", [])
         if quotes and quotes[0].get("quoteType") == "EQUITY":
-            q = quotes[0]
-            return q.get("symbol", ""), q.get("sectorDisp", q.get("sector", "Unknown"))
+            q      = quotes[0]
+            symbol = q.get("symbol", "")
+            sector = q.get("sectorDisp", q.get("sector", "")) or ""
+            if not sector and symbol:
+                sector = _get_yf_sector(symbol)
+            return symbol, sector or "Unknown"
     except Exception:
         pass
     return "", "Unknown"
@@ -487,10 +502,13 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
 
 # ── yfinance helpers ──────────────────────────────────────────────────────────
 def _history_with_fallback(ticker: str, start: str, end: str):
-    hist = yf.Ticker(ticker).history(start=start, end=end)
-    if hist.empty and "." in ticker:
-        hist = yf.Ticker(ticker.split(".")[0]).history(start=start, end=end)
-    return hist
+    try:
+        hist = yf.Ticker(ticker).history(start=start, end=end, timeout=10)
+        if hist.empty and "." in ticker:
+            hist = yf.Ticker(ticker.split(".")[0]).history(start=start, end=end, timeout=10)
+        return hist
+    except Exception:
+        return pd.DataFrame()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -905,7 +923,11 @@ latest_str   = latest.strftime("%b %d, %Y") if pd.notna(latest) else "—"
 buys         = (filtered["Transaction Type"] == "🟢 Buy").sum()
 sells        = (filtered["Transaction Type"] == "🔴 Sell").sum()
 notable_buys = filtered["Notable"].sum()
-sectors_n    = filtered[filtered["Sector"] != "Unknown"]["Sector"].nunique()
+sectors_n    = filtered[
+    filtered["Sector"].notna() &
+    (filtered["Sector"] != "") &
+    (filtered["Sector"] != "Unknown")
+]["Sector"].nunique()
 
 _ratio_num     = round(buys / sells, 1) if sells > 0 else None
 _ratio_display = (
