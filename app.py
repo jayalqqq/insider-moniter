@@ -1222,8 +1222,6 @@ _BASE_LAYOUT  = dict(
     height=268,
     font=_CHART_FONT,
     hoverlabel=dict(bgcolor="#0c1628", bordercolor="#1e2a3a", font=dict(color="#e2e8f0", size=12)),
-    modebar=dict(remove=["toImage", "zoom2d", "pan2d", "select2d", "lasso2d",
-                         "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d"]),
 )
 
 _CHART_CONFIG = dict(displayModeBar=False, responsive=True)
@@ -1258,8 +1256,7 @@ with charts_placeholder.container():
             mode="lines",
             line=dict(color="#3b82f6", width=2),
             fill="tozeroy",
-            fillgradient=dict(colorscale=[[0, "rgba(37,99,235,0.25)"], [1, "rgba(37,99,235,0)"]],
-                              type="vertical"),
+            fillcolor="rgba(37,99,235,0.15)",
             hovertemplate="%{x|%b %d}<br><b>%{y} filings</b><extra></extra>",
             name="Filings",
         ))
@@ -1320,8 +1317,8 @@ with charts_placeholder.container():
                 itemsizing="constant",
                 traceorder="normal",
             ),
-            margin=dict(l=0, r=80, t=14, b=0),
         )
+        fig.update_layout(margin_r=80)
         st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
     # ── Top 10 Locations — horizontal bar chart ───────────────────────────────
