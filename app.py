@@ -1375,7 +1375,6 @@ with charts_placeholder.container():
             ))
         fig.update_layout(
             **_BASE_LAYOUT,
-            height=280,
             barmode="group",
             bargap=0.28,
             bargroupgap=0.08,
@@ -1389,6 +1388,7 @@ with charts_placeholder.container():
                 itemsizing="constant",
             ),
         )
+        fig.update_layout(height=280)
         st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
     st.markdown("---")
@@ -1577,8 +1577,6 @@ with table_placeholder.container():
             )
             fig_chart.update_layout(
                 **_BASE_LAYOUT,
-                height=320,
-                margin=dict(l=0, r=0, t=36, b=0),
                 title=dict(
                     text=f"{sel_ticker} — 30 days post-transaction",
                     font=dict(size=13, color="#94a3b8", family="Inter"),
@@ -1588,6 +1586,7 @@ with table_placeholder.container():
                 yaxis=dict(**_AXIS_BASE, showgrid=True, tickprefix="$"),
                 showlegend=False,
             )
+            fig_chart.update_layout(height=320, margin_t=36)
             st.plotly_chart(fig_chart, use_container_width=True, config=_CHART_CONFIG)
 
 # ── Hover sparkline tooltip JS (fixed: delayed hide + pointer-events + above row) ──
