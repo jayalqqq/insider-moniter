@@ -26,12 +26,39 @@ st.set_page_config(
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter+Tight:wght@400;500;600&display=swap');
+
+:root {
+    --ink:        #000000;
+    --paper:      #ffffff;
+    --fog:        #8a8a8a;
+    --ash:        #5f5f5f;
+    --dim:        #3a3a3a;
+    --line:       #1a1a1a;
+    --line-2:     #2c2c2c;
+    --buy:        #4ade80;
+    --sell:       #f87171;
+    --buy-solid:  #22c55e;
+    --sell-solid: #ef4444;
+    --font-display: 'Space Grotesk', 'Inter Tight', sans-serif;
+    --font-mono:    'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+    --font-body:    'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
+}
 
 /* ── Global ── */
 *, *::before, *::after {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    font-family: var(--font-body);
+    box-sizing: border-box;
 }
+
+/* Scrollbar — thin, monochrome (matches the reference) */
+::-webkit-scrollbar        { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb  { background: #2a2a2a; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+::-webkit-scrollbar-track  { background: #000; }
+
+/* Inverted selection */
+::selection { background: #fff; color: #000; }
 
 /* ── Hide all Streamlit chrome ── */
 #MainMenu,
@@ -44,124 +71,127 @@ footer,
     visibility: hidden !important;
 }
 
-/* ── App background — deep navy with radial glow ── */
+/* ── App background — pure black ── */
 .stApp {
-    background-color: #080d1a;
-    color: #e2e8f0;
-    background-image:
-        radial-gradient(ellipse 70% 40% at 50% -10%, rgba(37,99,235,0.08) 0%, transparent 70%);
+    background-color: #000;
+    color: #e0e0e0;
 }
 
 /* ── Push content below fixed navbar ── */
 .main .block-container {
-    padding-top: 88px !important;
-    padding-bottom: 64px !important;
-    max-width: 1400px;
+    padding-top: 96px !important;
+    padding-bottom: 104px !important;
+    max-width: 1440px;
 }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
-    background-color: #0b1120;
-    border-right: 1px solid #151f35;
+    background-color: #000;
+    border-right: 1px solid var(--line);
 }
 section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
 section[data-testid="stSidebar"] label {
+    font-family: var(--font-mono) !important;
     text-transform: uppercase !important;
     font-size: 10px !important;
-    letter-spacing: 0.12em !important;
-    color: #3b5280 !important;
-    font-weight: 700 !important;
+    letter-spacing: 0.14em !important;
+    color: var(--ash) !important;
+    font-weight: 500 !important;
 }
-/* sidebar inputs */
-section[data-testid="stSidebar"] input {
-    background-color: #0e1829 !important;
-    border-color: #1a2d47 !important;
-    color: #8ca3c0 !important;
+/* inputs + selects, both sidebar and main */
+input, textarea,
+div[data-baseweb="select"] > div,
+div[data-baseweb="input"] > div {
+    background-color: #0a0a0a !important;
+    border-color: var(--line-2) !important;
+    border-radius: 0 !important;
+    color: #d0d0d0 !important;
+}
+div[data-baseweb="tag"] {
+    background-color: #161616 !important;
+    border-radius: 0 !important;
+    font-family: var(--font-mono) !important;
 }
 
-/* ── Buttons ── */
-.stButton > button {
-    background: transparent !important;
-    border: 1px solid #1a3050 !important;
-    color: #4d7caf !important;
-    font-weight: 700 !important;
-    font-size: 11px !important;
-    letter-spacing: 0.08em !important;
-    text-transform: uppercase !important;
-    padding: 9px 16px !important;
-    border-radius: 6px !important;
-    transition: all 0.2s ease !important;
-    width: 100%;
-}
-.stButton > button:hover {
-    background: rgba(37,99,235,0.08) !important;
-    border-color: #2563eb !important;
-    color: #60a5fa !important;
-}
+/* ── Buttons — brutalist invert on hover ── */
+.stButton > button,
 .stDownloadButton > button {
     background: transparent !important;
-    border: 1px solid #1a3050 !important;
-    color: #4d7caf !important;
-    font-weight: 700 !important;
+    border: 1px solid var(--line-2) !important;
+    color: #e8e8e8 !important;
+    font-family: var(--font-mono) !important;
+    font-weight: 500 !important;
     font-size: 11px !important;
-    border-radius: 6px !important;
-    transition: all 0.2s ease !important;
+    letter-spacing: 0.14em !important;
+    text-transform: uppercase !important;
+    padding: 11px 16px !important;
+    border-radius: 0 !important;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease !important;
+    width: 100%;
 }
+.stButton > button:hover,
 .stDownloadButton > button:hover {
-    background: rgba(37,99,235,0.08) !important;
-    border-color: #2563eb !important;
-    color: #60a5fa !important;
+    background: #fff !important;
+    border-color: #fff !important;
+    color: #000 !important;
+}
+.stButton > button:focus-visible,
+.stDownloadButton > button:focus-visible {
+    outline: 2px solid #fff !important;
+    outline-offset: 2px !important;
 }
 
-/* ── KPI Grid ── */
+/* ── KPI Grid — boxed hairline grid ── */
 .kpi-grid {
-    display: flex; gap: 16px; margin-bottom: 40px; flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    margin-bottom: 56px;
 }
 .kpi-card {
-    flex: 1; min-width: 140px;
-    background-color: #0c1628;
-    border: 1px solid #172038;
-    border-top: none;
-    border-radius: 12px;
-    padding: 28px 28px 24px;
     position: relative;
+    background: #000;
+    padding: 26px 22px 24px;
     overflow: hidden;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    transition: background 0.2s ease;
 }
-.kpi-card:hover {
-    border-color: #1e3055;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.4);
-    transform: translateY(-2px);
-}
-/* default blue top accent */
 .kpi-card::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 2px;
-    background: #2563eb;
-    border-radius: 12px 12px 0 0;
+    height: 2px; background: #fff;
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
 }
-.kpi-card.kpi-accent-green::before  { background: #16a34a; }
-.kpi-card.kpi-accent-amber::before  { background: #d97706; }
-.kpi-card.kpi-accent-purple::before { background: #7c3aed; }
+.kpi-card:hover           { background: #080808; }
+.kpi-card:hover::before   { transform: scaleX(1); }
+.kpi-card.kpi-mark-buy::before  { background: var(--buy-solid); }
+.kpi-card.kpi-mark-sell::before { background: var(--sell-solid); }
 
 .kpi-label {
-    color: #3b5280;
-    font-size: 10px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.14em;
-    margin-bottom: 14px;
+    font-family: var(--font-mono);
+    color: var(--ash);
+    font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 18px;
 }
 .kpi-value {
-    color: #f1f5f9;
-    font-size: 2.25rem; font-weight: 700;
+    font-family: var(--font-display);
+    color: #fff;
+    font-size: 2.4rem; font-weight: 500;
     font-variant-numeric: tabular-nums;
-    line-height: 1; letter-spacing: -0.03em;
+    line-height: 1; letter-spacing: -0.02em;
 }
 .kpi-desc {
-    color: #2e4268;
-    font-size: 11px; margin-top: 10px; line-height: 1.5;
+    font-family: var(--font-mono);
+    color: var(--dim);
+    font-size: 9.5px; margin-top: 12px; line-height: 1.5;
+    text-transform: uppercase; letter-spacing: 0.04em;
 }
+@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 640px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ── Live pulse ── */
 @keyframes livePulse {
@@ -169,9 +199,9 @@ section[data-testid="stSidebar"] input {
     50%       { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
 }
 .live-dot {
-    display: inline-block; width: 8px; height: 8px;
+    display: inline-block; width: 7px; height: 7px;
     background: #22c55e; border-radius: 50%;
-    margin-right: 6px; vertical-align: middle;
+    margin-right: 4px; vertical-align: middle;
     animation: livePulse 2s ease-in-out infinite;
 }
 
@@ -181,14 +211,13 @@ section[data-testid="stSidebar"] input {
     100% { background-position:  800px 0; }
 }
 .shimmer {
-    background: linear-gradient(90deg, #0b1526 25%, #111e38 50%, #0b1526 75%);
+    background: linear-gradient(90deg, #080808 25%, #171717 50%, #080808 75%);
     background-size: 1600px 100%;
     animation: shimmer 1.8s ease-in-out infinite;
-    border-radius: 12px;
 }
-.skel-kpi-grid { display: flex; gap: 16px; margin-bottom: 40px; }
-.skel-kpi      { flex: 1; height: 108px; border-radius: 12px; }
-.skel-charts   { display: flex; gap: 16px; margin: 0 0 24px; }
+.skel-kpi-grid { display: flex; gap: 1px; margin-bottom: 56px; }
+.skel-kpi      { flex: 1; height: 116px; }
+.skel-charts   { display: flex; gap: 24px; margin: 0 0 24px; }
 .skel-chart    { flex: 1; height: 280px; }
 .skel-table    { width: 100%; height: 420px; }
 
@@ -199,11 +228,10 @@ section[data-testid="stSidebar"] input {
 }
 .stPlotlyChart { animation: chartFadeIn 0.5s ease-out both; }
 
-/* ── Cursor glow ── */
+/* ── Cursor glow — faint monochrome ── */
 #cursor-glow {
-    position: fixed; width: 500px; height: 500px; border-radius: 50%;
-    background: radial-gradient(circle,
-        rgba(37,99,235,0.045) 0%, rgba(56,189,248,0.02) 45%, transparent 70%);
+    position: fixed; width: 460px; height: 460px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.028) 0%, transparent 66%);
     pointer-events: none;
     transform: translate(-50%, -50%);
     z-index: 0; will-change: left, top;
@@ -213,116 +241,125 @@ section[data-testid="stSidebar"] input {
 /* ── Navbar (injected into parent frame) ── */
 #top-navbar {
     position: fixed; top: 0; left: 0; right: 0; z-index: 999999;
-    height: 56px;
-    background: rgba(8,13,26,0.94);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid #151f35;
+    height: 60px;
+    background: #000;
+    border-bottom: 1px solid var(--line);
     display: flex; align-items: center;
-    padding: 0 32px;
+    padding: 0 28px;
     justify-content: space-between;
-    box-shadow: 0 1px 0 rgba(37,99,235,0.1);
 }
 #top-navbar .nav-brand {
-    display: flex; align-items: center; gap: 9px;
+    display: flex; align-items: baseline; gap: 3px;
     text-decoration: none; cursor: default;
 }
-#top-navbar .nav-icon { font-size: 17px; line-height: 1; }
 #top-navbar .nav-wordmark {
-    font-size: 14px; font-weight: 800; letter-spacing: 0.12em;
-    color: #f1f5f9;
+    font-family: var(--font-display);
+    font-size: 15px; font-weight: 700; letter-spacing: 0.26em;
+    color: #fff;
 }
-#top-navbar .nav-wordmark em {
-    font-style: normal; color: #2563eb;
+#top-navbar .nav-mark {
+    font-family: var(--font-display);
+    color: #fff; font-size: 12px; margin-left: 2px;
+}
+#top-navbar .nav-tag {
+    font-family: var(--font-mono);
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--ash);
 }
 #top-navbar .nav-right {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 22px;
 }
 #top-navbar .nav-pill-live {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #16a34a;
-    background: rgba(22,163,74,0.08);
-    border: 1px solid rgba(22,163,74,0.18);
-    padding: 5px 12px; border-radius: 999px;
-    margin-right: 8px;
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--font-mono);
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: #e8e8e8;
 }
 #top-navbar .nav-right a {
-    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
-    text-transform: uppercase; color: #3b5280; text-decoration: none;
-    padding: 6px 14px; border-radius: 6px;
-    border: 1px solid transparent;
-    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--fog); text-decoration: none;
+    transition: color 0.15s ease;
 }
-#top-navbar .nav-right a:hover {
-    color: #93c5fd; border-color: #1a3050;
-    background: rgba(37,99,235,0.06);
-}
+#top-navbar .nav-right a:hover { color: #fff; }
+@media (max-width: 720px) { #top-navbar .nav-tag { display: none; } }
 
-/* ── Hero section ── */
+/* ── Hero section — editorial, oversized ── */
 .hero-section {
-    padding: 52px 0 44px;
-    border-bottom: 1px solid #151f35;
-    margin-bottom: 44px;
+    padding: 8px 0 40px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 52px;
 }
-.hero-eyebrow {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.2em;
-    text-transform: uppercase; color: #2563eb;
-    margin-bottom: 18px;
+.hero-topline {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-top: 1px solid var(--line);
+    padding-top: 16px; margin-bottom: 54px;
+    font-family: var(--font-mono);
+    font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ash); line-height: 1.9;
 }
+.hero-topline .right { text-align: right; }
 .hero-headline {
-    font-size: 52px; font-weight: 800;
-    color: #f1f5f9; line-height: 1.04;
-    letter-spacing: -0.03em;
-    margin: 0 0 18px 0;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(42px, 8.6vw, 116px);
+    line-height: 0.9; letter-spacing: -0.035em;
+    color: #fff; margin: 0; text-transform: uppercase;
 }
-.hero-headline .hl {
-    background: linear-gradient(92deg, #e2e8f0 0%, #93c5fd 55%, #60a5fa 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
+.hero-headline .outline {
+    -webkit-text-stroke: 1.4px #fff;
+    color: transparent;
+}
+.hero-foot {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-top: 40px; gap: 28px; flex-wrap: wrap;
 }
 .hero-sub {
-    font-size: 16px; color: #3b5280; line-height: 1.65;
-    max-width: 520px; margin: 0 0 28px 0; font-weight: 400;
+    font-family: var(--font-body);
+    font-size: 15px; color: var(--fog); line-height: 1.6;
+    max-width: 460px; margin: 0;
 }
 .hero-meta {
-    display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ash);
 }
-.hero-live {
-    display: flex; align-items: center; gap: 7px;
-    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #22c55e;
-}
-.hero-meta-item { font-size: 12px; color: #2e4268; }
-.hero-meta-sep  { font-size: 12px; color: #1a2743; }
+.hero-live { display: flex; align-items: center; gap: 6px; color: #e8e8e8; }
+.hero-meta-sep { color: var(--line-2); }
 
-/* ── Section label (above charts, table) ── */
+/* ── Section label ── */
 .section-label {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
-    text-transform: uppercase; color: #2e4268;
-    margin-bottom: 16px; padding-bottom: 10px;
-    border-bottom: 1px solid #111e38;
+    font-family: var(--font-mono);
+    font-size: 10.5px; font-weight: 500; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--fog);
+    margin-bottom: 20px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
 }
 
 /* ── Sidebar chrome ── */
 .sidebar-brand {
-    padding: 24px 0 6px;
-    border-bottom: 1px solid #151f35;
-    margin-bottom: 8px;
+    padding: 26px 0 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 6px;
 }
 .sidebar-brand-label {
-    font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
-    text-transform: uppercase; color: #1e3050; margin-bottom: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 8px;
 }
 .sidebar-brand-title {
-    font-size: 15px; font-weight: 700; color: #4d7caf;
-    letter-spacing: -0.01em;
+    font-family: var(--font-display);
+    font-size: 18px; font-weight: 600; color: #fff;
+    letter-spacing: 0.04em; text-transform: uppercase;
 }
 .sidebar-div {
-    height: 1px; background: #111e38; margin: 14px 0;
+    height: 1px; background: var(--line); margin: 16px 0;
 }
 .sidebar-footer {
-    font-size: 10px; color: #1e3050; line-height: 1.7; padding-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px; color: var(--dim); line-height: 1.9; padding-top: 6px;
+    text-transform: uppercase; letter-spacing: 0.06em;
 }
 
 /* ── Table ── */
@@ -331,21 +368,23 @@ section[data-testid="stSidebar"] input {
     font-size: 12.5px; table-layout: fixed;
 }
 .filing-table th {
-    background-color: #090e1c;
-    color: #2e4268;
-    padding: 12px 12px;
+    background-color: #000;
+    color: var(--ash);
+    padding: 13px 12px;
     text-align: left;
-    border-bottom: 1px solid #151f35;
-    font-size: 10px; font-weight: 700;
+    border-bottom: 1px solid var(--line-2);
+    font-family: var(--font-mono);
+    font-size: 9.5px; font-weight: 500;
     text-transform: uppercase; letter-spacing: 0.12em;
     white-space: nowrap; overflow: hidden;
     position: sticky; top: 0; z-index: 1;
 }
 .filing-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #0c1424;
+    padding: 11px 12px;
+    border-bottom: 1px solid #101010;
     vertical-align: middle; overflow: hidden; text-overflow: ellipsis;
     transition: background-color 0.12s ease;
+    color: #c4c4c4;
 }
 .filing-table .col-date   { width: 90px;  white-space: nowrap; }
 .filing-table .col-txn    { width: 78px;  white-space: nowrap; }
@@ -358,72 +397,74 @@ section[data-testid="stSidebar"] input {
 .filing-table .col-ret    { width: 155px; white-space: nowrap; }
 .filing-table .col-link   { width: 60px;  white-space: nowrap; }
 
-.filing-table tbody tr:nth-child(even) td { background-color: #080d1a; }
-.filing-table tbody tr:nth-child(odd)  td { background-color: #090e1e; }
-.filing-table tr:hover td                 { background-color: #0d1a30 !important; }
-.filing-table tr:hover td:first-child     { border-left: 2px solid #2563eb; }
-.filing-table tr.notable td              { background-color: #060f0a !important; }
-.filing-table tr.notable td:first-child  { border-left: 2px solid #16a34a; }
-.filing-table tr.notable:hover td:first-child { border-left: 2px solid #2563eb; }
-.filing-table a { color: #2563eb; text-decoration: none; font-weight: 500; }
-.filing-table a:hover { color: #60a5fa; }
-.exec-name { font-weight: 700; color: #dde6f0; }
-.co-name   { color: #2e4268; font-size: 12px; }
+.filing-table tbody tr td { background-color: #000; }
+.filing-table tr:hover td              { background-color: #0b0b0b !important; }
+.filing-table tr:hover td:first-child  { box-shadow: inset 2px 0 0 #fff; }
+.filing-table tr.notable td              { background-color: #050805 !important; }
+.filing-table tr.notable td:first-child  { box-shadow: inset 2px 0 0 var(--buy-solid); }
+.filing-table a { color: #e8e8e8; text-decoration: none; font-weight: 500; }
+.filing-table a:hover { color: #fff; text-decoration: underline; }
+.exec-name { font-family: var(--font-body); font-weight: 600; color: #fff; }
+.co-name   { font-family: var(--font-mono); color: var(--ash); font-size: 11px; letter-spacing: 0.02em; }
+.notable-flag { color: var(--buy-solid); font-size: 8px; margin-right: 6px; vertical-align: middle; }
 
-/* ── Transaction pills ── */
+/* ── Transaction tags ── */
 .txn-pill {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 3px 10px; border-radius: 999px;
-    font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
-    text-transform: uppercase; white-space: nowrap;
+    padding: 3px 9px; border-radius: 0;
+    font-family: var(--font-mono);
+    font-size: 9.5px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; white-space: nowrap; border: 1px solid;
 }
-.txn-buy   { background: rgba(22,163,74,0.1);  color: #4ade80; border: 1px solid rgba(22,163,74,0.2); }
-.txn-sell  { background: rgba(220,38,38,0.1);  color: #f87171; border: 1px solid rgba(220,38,38,0.2); }
-.txn-award { background: rgba(37,99,235,0.1);  color: #60a5fa; border: 1px solid rgba(37,99,235,0.2); }
-.txn-other { background: rgba(71,85,105,0.08); color: #64748b; border: 1px solid rgba(71,85,105,0.15); }
+.txn-buy   { color: var(--buy);  border-color: rgba(74,222,128,0.35);  background: rgba(74,222,128,0.06); }
+.txn-sell  { color: var(--sell); border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.06); }
+.txn-award { color: #e8e8e8;     border-color: var(--line-2);          background: transparent; }
+.txn-other { color: var(--ash);  border-color: var(--line);            background: transparent; }
 
-/* ── Ticker pill ── */
+/* ── Ticker tag ── */
 .ticker-pill {
     display: inline-block;
-    background-color: rgba(37,99,235,0.1); color: #60a5fa;
-    border: 1px solid rgba(37,99,235,0.18);
-    border-radius: 4px; padding: 1px 6px; font-size: 10px;
-    font-weight: 700; letter-spacing: 0.06em;
-    margin-left: 4px; vertical-align: middle;
+    font-family: var(--font-mono);
+    color: #e8e8e8; border: 1px solid var(--line-2);
+    border-radius: 0; padding: 1px 5px; font-size: 9.5px;
+    font-weight: 500; letter-spacing: 0.08em;
+    margin-left: 6px; vertical-align: middle;
 }
 
 /* ── Badges ── */
 .badge {
     display: inline-block;
-    background-color: rgba(37,99,235,0.1); color: #60a5fa;
-    border: 1px solid rgba(37,99,235,0.18);
-    border-radius: 6px; padding: 2px 10px;
-    font-size: 11px; font-weight: 600;
+    font-family: var(--font-mono);
+    color: #e8e8e8; border: 1px solid var(--line-2);
+    border-radius: 0; padding: 3px 10px;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase;
 }
 .badge-alert {
-    background-color: rgba(217,119,6,0.1); color: #fbbf24;
-    border-color: rgba(217,119,6,0.2);
+    color: var(--buy); border-color: rgba(74,222,128,0.4);
 }
 
 /* ── SEC link button ── */
 .filing-link-btn {
     display: inline-block;
-    padding: 3px 10px;
-    border: 1px solid rgba(37,99,235,0.25);
-    border-radius: 4px;
-    color: #2563eb !important;
-    font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+    padding: 3px 9px;
+    border: 1px solid var(--line-2);
+    border-radius: 0;
+    color: #e8e8e8 !important;
+    font-family: var(--font-mono);
+    font-size: 9.5px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase;
     text-decoration: none !important;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
     white-space: nowrap;
 }
 .filing-link-btn:hover {
-    border-color: #3b82f6;
-    background: rgba(37,99,235,0.08);
-    color: #60a5fa !important;
+    border-color: #fff;
+    background: #fff;
+    color: #000 !important;
     text-decoration: none !important;
 }
-.filing-link-btn:active { transform: scale(0.94); }
+.filing-link-btn:active { transform: scale(0.95); }
 
 /* ── Toast ── */
 #toast-container {
@@ -432,10 +473,13 @@ section[data-testid="stSidebar"] input {
     gap: 8px; pointer-events: none;
 }
 .st-toast {
-    background: #0c1628; border: 1px solid #172038;
-    border-left: 3px solid #2563eb; border-radius: 8px;
-    padding: 14px 20px; font-size: 13px; color: #dde6f0;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6); min-width: 240px;
+    background: #000; border: 1px solid var(--line-2);
+    border-left: 2px solid #fff; border-radius: 0;
+    padding: 14px 20px;
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #e8e8e8;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8); min-width: 240px;
     opacity: 0; transform: translateX(16px);
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
@@ -447,11 +491,13 @@ section[data-testid="stSidebar"] input {
     #cursor-glow      { display: none !important; }
     .st-toast         { transition: none !important; }
     .live-dot         { animation: none !important; }
+    .kpi-card::before { transition: none !important; }
 }
 
-hr { border: none; border-top: 1px solid #151f35; margin: 28px 0; }
-h2 { color: #dde6f0 !important; font-size: 13px !important; font-weight: 700 !important;
-     letter-spacing: 0.08em !important; text-transform: uppercase !important; }
+hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+h2 { color: #e0e0e0 !important; font-family: var(--font-mono) !important;
+     font-size: 12px !important; font-weight: 500 !important;
+     letter-spacing: 0.12em !important; text-transform: uppercase !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -462,6 +508,7 @@ MAX_RESULTS = 200
 
 TRANSACTION_LABELS = {"P": "🟢 Buy", "S": "🔴 Sell", "A": "🔵 Award"}
 TRANSACTION_ORDER  = ["🟢 Buy", "🔴 Sell", "🔵 Award", "⚪ Other"]
+TXN_CLEAN_LABELS   = {"🟢 Buy": "Buy", "🔴 Sell": "Sell", "🔵 Award": "Award", "⚪ Other": "Other"}
 PIE_COLORS = {
     "🟢 Buy": "#22c55e", "🔴 Sell": "#ef4444",
     "🔵 Award": "#3b82f6", "⚪ Other": "#6b7280",
@@ -900,13 +947,14 @@ components.html("""
     nav.id = 'top-navbar';
     nav.innerHTML =
       '<div class="nav-brand">'
-      + '<span class="nav-icon">📊</span>'
-      + '<span class="nav-wordmark">INSIDER<em>.IO</em></span>'
+      + '<span class="nav-wordmark">INSIDER</span>'
+      + '<span class="nav-mark">&#10022;</span>'
       + '</div>'
+      + '<div class="nav-tag">SEC EDGAR / Form 4</div>'
       + '<div class="nav-right">'
       + '<div class="nav-pill-live"><span class="live-dot"></span>Live</div>'
-      + '<a href="https://github.com" target="_blank">GitHub</a>'
-      + '<a href="#">About</a>'
+      + '<a href="https://github.com/jayalqqq/insider-moniter" target="_blank" rel="noopener">GitHub</a>'
+      + '<a href="https://www.sec.gov/about/forms/form4data.pdf" target="_blank" rel="noopener">About</a>'
       + '</div>';
     pd.body.prepend(nav);
   }
@@ -945,7 +993,7 @@ with st.sidebar:
     col_s, col_e = st.columns(2)
     with col_s:
         start_date = st.date_input(
-            "📅 Start",
+            "Start",
             value=date(2025, 1, 1),
             max_value=date.today(),
             key="start_date",
@@ -953,14 +1001,14 @@ with st.sidebar:
         )
     with col_e:
         end_date = st.date_input(
-            "📅 End",
+            "End",
             value=date.today(),
             max_value=date.today(),
             key="end_date",
             on_change=fetch_filings.clear,
         )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
-    refresh = st.button("🔄 Refresh Data", use_container_width=True)
+    refresh = st.button("Refresh Data", use_container_width=True)
     if refresh:
         st.cache_data.clear()
         st.session_state["_refreshed"] = True
@@ -969,15 +1017,18 @@ with st.sidebar:
 st.markdown(
     f"""
 <div class="hero-section">
-  <div class="hero-eyebrow">SEC Form 4 Intelligence</div>
-  <h1 class="hero-headline">Track What<br><span class="hl">Insiders Know</span></h1>
-  <p class="hero-sub">Real-time SEC Form 4 filings — see exactly when executives buy and sell their own stock.</p>
-  <div class="hero-meta">
-    <div class="hero-live"><span class="live-dot"></span>Live</div>
-    <span class="hero-meta-sep">·</span>
-    <span class="hero-meta-item">Form 4 filings via SEC EDGAR</span>
-    <span class="hero-meta-sep">·</span>
-    <span class="hero-meta-item">{start_date.strftime('%b %d, %Y')} – {end_date.strftime('%b %d, %Y')}</span>
+  <div class="hero-topline">
+    <div class="left">SEC EDGAR<br>Form 4 Filings</div>
+    <div class="right">Insider<br>Intelligence</div>
+  </div>
+  <h1 class="hero-headline">Track What<br><span class="outline">Insiders</span> Know</h1>
+  <div class="hero-foot">
+    <p class="hero-sub">Real-time SEC Form 4 filings — see exactly when executives buy and sell shares in their own companies, and what the stock did next.</p>
+    <div class="hero-meta">
+      <span class="hero-live"><span class="live-dot"></span>Live</span>
+      <span class="hero-meta-sep">/</span>
+      <span>{start_date.strftime('%b %d, %Y')} — {end_date.strftime('%b %d, %Y')}</span>
+    </div>
   </div>
 </div>
 """,
@@ -1031,8 +1082,9 @@ with st.spinner("Fetching market data (tickers, sectors, returns)…"):
 with st.sidebar:
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     txn_filter = st.multiselect(
-        "🔀 Transaction Type", options=TRANSACTION_ORDER,
+        "Transaction Type", options=TRANSACTION_ORDER,
         default=[], placeholder="All types",
+        format_func=lambda x: TXN_CLEAN_LABELS.get(x, x),
     )
 
     all_tickers = sorted(t for t in df["Ticker"].dropna().unique() if t)
@@ -1041,7 +1093,7 @@ with st.sidebar:
         for t in all_tickers
     }
     ticker_sel = st.selectbox(
-        "📈 Ticker",
+        "Ticker",
         options=[""] + all_tickers,
         format_func=lambda x: "All tickers" if x == "" else ticker_label_map.get(x, x),
     )
@@ -1049,13 +1101,13 @@ with st.sidebar:
 
     all_companies = sorted(df["Company"].dropna().unique().tolist())
     company_sel = st.selectbox(
-        "🏢 Company",
+        "Company",
         options=[""] + all_companies,
         format_func=lambda x: "All companies" if x == "" else x,
     )
     company_filter = company_sel or ""
 
-    location_filter = st.text_input("📍 Location", placeholder="e.g. CA, NY, TX")
+    location_filter = st.text_input("Location", placeholder="e.g. CA, NY, TX")
 
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     st.markdown(
@@ -1136,19 +1188,19 @@ _kpi_html = f"""
     <div class="kpi-value" data-target="{companies}" data-type="int">0</div>
     <div class="kpi-desc">Distinct issuers</div>
   </div>
-  <div class="kpi-card kpi-accent-amber">
+  <div class="kpi-card kpi-mark-sell">
     <div class="kpi-label">Buy / Sell Ratio</div>
     <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{"0" if _ratio_num else _ratio_display}</div>
-    <div class="kpi-desc">{buys} buys · {sells} sells</div>
+    <div class="kpi-desc">{buys} buys / {sells} sells</div>
   </div>
-  <div class="kpi-card kpi-accent-green">
+  <div class="kpi-card kpi-mark-buy">
     <div class="kpi-label">Notable Buys</div>
     <div class="kpi-value" data-target="{notable_buys}" data-type="int">0</div>
-    <div class="kpi-desc">CEO / CFO / President purchasing</div>
+    <div class="kpi-desc">CEO / CFO / President buying</div>
   </div>
-  <div class="kpi-card kpi-accent-purple">
+  <div class="kpi-card">
     <div class="kpi-label">Latest Filing</div>
-    <div class="kpi-value" data-type="date" style="font-size:1.4rem;opacity:0;">{latest_str}</div>
+    <div class="kpi-value" data-type="date" style="font-size:1.5rem;opacity:0;">{latest_str}</div>
     <div class="kpi-desc">Most recent submission</div>
   </div>
   <div class="kpi-card">
@@ -1207,12 +1259,12 @@ components.html("""
 """, height=0)
 
 # ── Replace charts skeleton ───────────────────────────────────────────────────
-_CHART_FONT   = dict(family="Inter, -apple-system, sans-serif", color="#94a3b8")
-_GRID_COLOR   = "#1e2a3a"
-_TICK_COLOR   = "#94a3b8"
+_CHART_FONT   = dict(family="IBM Plex Mono, monospace", color="#8a8a8a", size=11)
+_GRID_COLOR   = "#1a1a1a"
+_TICK_COLOR   = "#8a8a8a"
 _TRANSPARENT  = "rgba(0,0,0,0)"
 _AXIS_BASE    = dict(
-    color=_TICK_COLOR, tickfont=dict(color=_TICK_COLOR, size=11),
+    color=_TICK_COLOR, tickfont=dict(color=_TICK_COLOR, size=10, family="IBM Plex Mono, monospace"),
     linecolor=_GRID_COLOR, showline=False, zeroline=False,
     gridcolor=_GRID_COLOR, gridwidth=1,
 )
@@ -1221,7 +1273,8 @@ _BASE_LAYOUT  = dict(
     plot_bgcolor=_TRANSPARENT, paper_bgcolor=_TRANSPARENT,
     height=268,
     font=_CHART_FONT,
-    hoverlabel=dict(bgcolor="#0c1628", bordercolor="#1e2a3a", font=dict(color="#e2e8f0", size=12)),
+    hoverlabel=dict(bgcolor="#000", bordercolor="#2c2c2c",
+                    font=dict(color="#e8e8e8", size=11, family="IBM Plex Mono, monospace")),
 )
 
 _CHART_CONFIG = dict(displayModeBar=False, responsive=True)
@@ -1254,16 +1307,16 @@ with charts_placeholder.container():
         fig.add_trace(go.Scatter(
             x=daily["Date"], y=daily["Filings"],
             mode="lines",
-            line=dict(color="#3b82f6", width=2),
+            line=dict(color="#ffffff", width=1.5),
             fill="tozeroy",
-            fillcolor="rgba(37,99,235,0.15)",
+            fillcolor="rgba(255,255,255,0.05)",
             hovertemplate="%{x|%b %d}<br><b>%{y} filings</b><extra></extra>",
             name="Filings",
         ))
         fig.add_hline(
-            y=avg_filings, line_dash="dot", line_color="#1e3a5f", line_width=1,
-            annotation_text=f"avg {avg_filings:.0f}",
-            annotation_font=dict(color="#3b5280", size=10),
+            y=avg_filings, line_dash="dot", line_color="#333333", line_width=1,
+            annotation_text=f"AVG {avg_filings:.0f}",
+            annotation_font=dict(color="#5f5f5f", size=9, family="IBM Plex Mono, monospace"),
             annotation_position="bottom right",
         )
         fig.update_layout(
@@ -1288,22 +1341,23 @@ with charts_placeholder.container():
         _donut_colors = {
             "🟢 Buy":   "#22c55e",
             "🔴 Sell":  "#ef4444",
-            "🔵 Award": "#3b82f6",
-            "⚪ Other": "#64748b",
+            "🔵 Award": "#e8e8e8",
+            "⚪ Other": "#3f3f3f",
         }
         _total_txn = int(txn_counts["Count"].sum())
         fig = go.Figure(go.Pie(
             labels=txn_counts["Label"],
             values=txn_counts["Count"],
-            marker_colors=[_donut_colors.get(t, "#64748b") for t in txn_counts["Type"]],
-            hole=0.65,
+            marker=dict(colors=[_donut_colors.get(t, "#3f3f3f") for t in txn_counts["Type"]],
+                        line=dict(color="#000", width=2)),
+            hole=0.68,
             textinfo="none",
             hovertemplate="<b>%{label}</b><br>%{value} transactions<br>%{percent}<extra></extra>",
         ))
         fig.add_annotation(
-            text=f"<b>{_total_txn:,}</b><br><span style='font-size:10px'>total</span>",
+            text=f"<b>{_total_txn:,}</b><br><span style='font-size:9px;letter-spacing:2px'>TOTAL</span>",
             x=0.5, y=0.5, showarrow=False,
-            font=dict(color="#e2e8f0", size=20, family="Inter"),
+            font=dict(color="#ffffff", size=22, family="Space Grotesk"),
             align="center",
         )
         fig.update_layout(
@@ -1313,7 +1367,7 @@ with charts_placeholder.container():
                 orientation="v", x=1.02, y=0.5,
                 xanchor="left", yanchor="middle",
                 bgcolor=_TRANSPARENT,
-                font=dict(color="#94a3b8", size=11),
+                font=dict(color="#8a8a8a", size=10, family="IBM Plex Mono, monospace"),
                 itemsizing="constant",
                 traceorder="normal",
             ),
@@ -1328,9 +1382,10 @@ with charts_placeholder.container():
         top_locs.columns = ["Location", "Filings"]
         top_locs = top_locs.sort_values("Filings", ascending=True)
         _n = len(top_locs)
+        # greyscale ramp: brightest bar = largest count (top), fading to dim
         _bar_colors = [
-            f"rgba({int(37 + (6-37)*i/max(_n-1,1))},{int(99 + (182-99)*i/max(_n-1,1))},{int(235 + (212-235)*i/max(_n-1,1))},0.85)"
-            for i in range(_n)
+            f"rgb({v},{v},{v})"
+            for v in (int(70 + (235 - 70) * i / max(_n - 1, 1)) for i in range(_n))
         ]
         fig = go.Figure(go.Bar(
             x=top_locs["Filings"],
@@ -1339,7 +1394,7 @@ with charts_placeholder.container():
             marker=dict(color=_bar_colors, line=dict(width=0)),
             text=top_locs["Filings"],
             textposition="outside",
-            textfont=dict(color="#4b6080", size=11),
+            textfont=dict(color="#5f5f5f", size=10, family="IBM Plex Mono, monospace"),
             hovertemplate="<b>%{y}</b><br>%{x} filings<extra></extra>",
             cliponaxis=False,
         ))
@@ -1384,7 +1439,7 @@ with charts_placeholder.container():
                 orientation="h", x=1, y=1,
                 xanchor="right", yanchor="bottom",
                 bgcolor=_TRANSPARENT,
-                font=dict(color="#94a3b8", size=11),
+                font=dict(color="#8a8a8a", size=10, family="IBM Plex Mono, monospace"),
                 itemsizing="constant",
             ),
         )
@@ -1398,7 +1453,7 @@ rows_html = ""
 for _, row in display.iterrows():
     notable    = row.get("Notable", False)
     tr_class   = "notable" if notable else ""
-    flag       = "🚨 " if notable else ""
+    flag       = "<span class='notable-flag'>&#9670;</span>" if notable else ""
     url        = row["Filing URL"]
     link       = f'<a href="{url}" target="_blank" rel="noopener noreferrer" class="filing-link-btn">SEC</a>' if url else "—"
     ticker     = row.get("Ticker", "") or ""
@@ -1439,7 +1494,7 @@ for _, row in display.iterrows():
 
 table_html = f"""
 <div style="overflow-x:hidden; max-height:560px; overflow-y:auto;
-            border:1px solid #151f35; border-radius:12px; width:100%;">
+            border:1px solid #1a1a1a; border-radius:0; width:100%;">
   <table class="filing-table">
     <colgroup>
       <col class="col-date">  <col class="col-txn">   <col class="col-exec">
@@ -1470,8 +1525,13 @@ with table_placeholder.container():
     with tbl_left:
         badge_html = f"<span class='badge'>{total} results</span>"
         if notable_buys:
-            badge_html += f" &nbsp;<span class='badge badge-alert'>🚨 {notable_buys} notable</span>"
-        st.markdown(f"**Recent Form 4 Filings** &nbsp; {badge_html}", unsafe_allow_html=True)
+            badge_html += f" &nbsp;<span class='badge badge-alert'>{notable_buys} notable</span>"
+        st.markdown(
+            f"<div class='section-label' style='display:flex;align-items:center;gap:14px;"
+            f"justify-content:space-between;'>"
+            f"<span>Recent Form 4 Filings</span><span>{badge_html}</span></div>",
+            unsafe_allow_html=True,
+        )
 
     with tbl_right:
         export_cols = [
@@ -1482,7 +1542,7 @@ with table_placeholder.container():
         export_df = filtered[export_cols].copy()
         export_df["Filed"] = export_df["Filed"].dt.strftime("%Y-%m-%d")
         st.download_button(
-            "⬇ Download CSV", export_df.to_csv(index=False),
+            "Download CSV", export_df.to_csv(index=False),
             file_name="insider_trades.csv", mime="text/csv",
             use_container_width=True,
         )
@@ -1491,12 +1551,13 @@ with table_placeholder.container():
     st.markdown(table_html, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
     _cache_note = (
-        f" &nbsp;·&nbsp; <span style='color:#854d0e;'>⚡ {_cache_hits}/{len(df)} from cache</span>"
+        f" &nbsp;/&nbsp; <span style='color:#5f5f5f;'>{_cache_hits}/{len(df)} from cache</span>"
         if _cache_hits > 0 else ""
     )
     st.markdown(
-        f"<small style='color:#4b5563'>Returns from transaction date · "
-        f"Last fetched: {datetime.now().strftime('%H:%M:%S')}{_cache_note}</small>",
+        f"<div style='font-family:var(--font-mono);font-size:9.5px;color:#3a3a3a;"
+        f"text-transform:uppercase;letter-spacing:0.08em;'>Returns from transaction date &nbsp;/&nbsp; "
+        f"Last fetched {datetime.now().strftime('%H:%M:%S')}{_cache_note}</div>",
         unsafe_allow_html=True,
     )
 
@@ -1506,7 +1567,7 @@ with table_placeholder.container():
 
     if has_returns:
         st.markdown("---")
-        st.markdown("**📊 Historical Performance — Buy Transactions**")
+        st.markdown("<div class='section-label'>Historical Performance — Buy Transactions</div>", unsafe_allow_html=True)
 
         def _kpi_ret(label, val):
             if val is None or (isinstance(val, float) and pd.isna(val)):
@@ -1522,7 +1583,7 @@ with table_placeholder.container():
 
     # ── Stock Price Explorer ──────────────────────────────────────────────────
     st.markdown("---")
-    st.markdown("**📉 Stock Price Explorer** — 30 days post-transaction")
+    st.markdown("<div class='section-label'>Stock Price Explorer — 30 Days Post-Transaction</div>", unsafe_allow_html=True)
 
     chart_df = filtered[filtered["Ticker"].astype(bool)][
         ["Company", "Ticker", "Transaction Date", "Filed"]
@@ -1548,38 +1609,37 @@ with table_placeholder.container():
         else:
             base_price = chart_data["Close"].iloc[0]
             end_price  = chart_data["Close"].iloc[-1]
-            line_color = "#22c55e" if end_price >= base_price else "#ef4444"
+            up         = end_price >= base_price
+            line_color = "#22c55e" if up else "#ef4444"
+            fill_color = "rgba(34,197,94,0.10)" if up else "rgba(239,68,68,0.10)"
             fig_chart  = go.Figure()
             fig_chart.add_trace(go.Scatter(
                 x=chart_data["Date"], y=chart_data["Close"],
                 mode="lines",
                 line=dict(color=line_color, width=2),
                 fill="tozeroy",
-                fillgradient=dict(
-                    colorscale=[[0, line_color.replace(")", ",0.15)").replace("rgb", "rgba")],
-                                  [1, "rgba(0,0,0,0)"]],
-                    type="vertical",
-                ),
+                fillcolor=fill_color,
                 hovertemplate="%{x|%b %d}<br><b>$%{y:.2f}</b><extra></extra>",
                 name=sel_ticker,
             ))
             fig_chart.add_vline(
                 x=int(pd.to_datetime(sel_date).timestamp() * 1000),
-                line_dash="dash", line_color="#d97706", line_width=1,
-                annotation_text="Transaction", annotation_font=dict(color="#d97706", size=11),
+                line_dash="dash", line_color="#ffffff", line_width=1,
+                annotation_text="TRANSACTION",
+                annotation_font=dict(color="#e8e8e8", size=9, family="IBM Plex Mono, monospace"),
                 annotation_position="top right",
             )
             fig_chart.add_hline(
-                y=base_price, line_dash="dot", line_color="#1e3a5f", line_width=1,
-                annotation_text=f"Entry ${base_price:.2f}",
-                annotation_font=dict(color="#3b5280", size=10),
+                y=base_price, line_dash="dot", line_color="#333333", line_width=1,
+                annotation_text=f"ENTRY ${base_price:.2f}",
+                annotation_font=dict(color="#5f5f5f", size=9, family="IBM Plex Mono, monospace"),
                 annotation_position="bottom right",
             )
             fig_chart.update_layout(
                 **_BASE_LAYOUT,
                 title=dict(
-                    text=f"{sel_ticker} — 30 days post-transaction",
-                    font=dict(size=13, color="#94a3b8", family="Inter"),
+                    text=f"{sel_ticker} / 30 DAYS POST-TRANSACTION",
+                    font=dict(size=11, color="#8a8a8a", family="IBM Plex Mono, monospace"),
                     x=0, pad=dict(l=0),
                 ),
                 xaxis=dict(**_AXIS_BASE, showgrid=False, tickformat="%b %d", nticks=8),
@@ -1604,18 +1664,19 @@ components.html("""
     tt.id = 'spark-tooltip';
     Object.assign(tt.style, {
       position:     'fixed',
-      background:   '#1a2235',
-      border:       '1px solid #2d3748',
-      borderLeft:   '3px solid #38bdf8',
-      borderRadius: '10px',
+      background:   '#000',
+      border:       '1px solid #2c2c2c',
+      borderLeft:   '2px solid #fff',
+      borderRadius: '0',
       padding:      '10px 14px',
-      fontSize:     '12px',
-      color:        '#f1f5f9',
+      fontFamily:   "'IBM Plex Mono', monospace",
+      fontSize:     '11px',
+      color:        '#e8e8e8',
       zIndex:       '99998',
       pointerEvents:'auto',
       opacity:      '0',
       transition:   'opacity 0.15s ease',
-      boxShadow:    '0 12px 32px rgba(0,0,0,0.6)',
+      boxShadow:    '0 12px 40px rgba(0,0,0,0.85)',
       minWidth:     '190px',
       maxWidth:     '240px'
     });
