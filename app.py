@@ -1207,69 +1207,192 @@ components.html("""
 """, height=0)
 
 # ── Replace charts skeleton ───────────────────────────────────────────────────
-_base_layout = dict(
-    margin=dict(l=0, r=0, t=10, b=0),
-    plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=260,
+_CHART_FONT   = dict(family="Inter, -apple-system, sans-serif", color="#94a3b8")
+_GRID_COLOR   = "#1e2a3a"
+_TICK_COLOR   = "#94a3b8"
+_TRANSPARENT  = "rgba(0,0,0,0)"
+_AXIS_BASE    = dict(
+    color=_TICK_COLOR, tickfont=dict(color=_TICK_COLOR, size=11),
+    linecolor=_GRID_COLOR, showline=False, zeroline=False,
+    gridcolor=_GRID_COLOR, gridwidth=1,
 )
+_BASE_LAYOUT  = dict(
+    margin=dict(l=0, r=0, t=14, b=0),
+    plot_bgcolor=_TRANSPARENT, paper_bgcolor=_TRANSPARENT,
+    height=268,
+    font=_CHART_FONT,
+    hoverlabel=dict(bgcolor="#0c1628", bordercolor="#1e2a3a", font=dict(color="#e2e8f0", size=12)),
+    modebar=dict(remove=["toImage", "zoom2d", "pan2d", "select2d", "lasso2d",
+                         "zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d"]),
+)
+
+_CHART_CONFIG = dict(displayModeBar=False, responsive=True)
+
+# label mapping without emoji for chart legends
+_TXN_LABEL_CLEAN = {
+    "🟢 Buy":   "Buy",
+    "🔴 Sell":  "Sell",
+    "🔵 Award": "Award",
+    "⚪ Other": "Other",
+}
+_SECTOR_COLORS = {
+    "Buy":  "#22c55e",
+    "Sell": "#ef4444",
+}
 
 with charts_placeholder.container():
     col_area, col_pie, col_bar = st.columns(3)
 
+    # ── Filings Over Time — filled area chart ─────────────────────────────────
     with col_area:
-        st.markdown("**Filings Over Time**")
+        st.markdown("<div class='section-label'>Filings Over Time</div>", unsafe_allow_html=True)
         daily = (
             filtered.set_index("Filed").resample("D")["Accession No"]
             .count().reset_index()
             .rename(columns={"Filed": "Date", "Accession No": "Filings"})
         )
-        fig = px.area(daily, x="Date", y="Filings",
-                      color_discrete_sequence=["#38bdf8"], template="plotly_dark")
-        fig.update_layout(**_base_layout,
-                          xaxis=dict(showgrid=False), yaxis=dict(gridcolor="#1f2937"))
-        st.plotly_chart(fig, use_container_width=True)
+        avg_filings = daily["Filings"].mean()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=daily["Date"], y=daily["Filings"],
+            mode="lines",
+            line=dict(color="#3b82f6", width=2),
+            fill="tozeroy",
+            fillgradient=dict(colorscale=[[0, "rgba(37,99,235,0.25)"], [1, "rgba(37,99,235,0)"]],
+                              type="vertical"),
+            hovertemplate="%{x|%b %d}<br><b>%{y} filings</b><extra></extra>",
+            name="Filings",
+        ))
+        fig.add_hline(
+            y=avg_filings, line_dash="dot", line_color="#1e3a5f", line_width=1,
+            annotation_text=f"avg {avg_filings:.0f}",
+            annotation_font=dict(color="#3b5280", size=10),
+            annotation_position="bottom right",
+        )
+        fig.update_layout(
+            **_BASE_LAYOUT,
+            xaxis=dict(**_AXIS_BASE, showgrid=False,
+                       tickformat="%b %d", nticks=6, tickangle=0),
+            yaxis=dict(**_AXIS_BASE, showgrid=True),
+            showlegend=False,
+        )
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
+    # ── Transaction Breakdown — donut chart ───────────────────────────────────
     with col_pie:
-        st.markdown("**Transaction Breakdown**")
+        st.markdown("<div class='section-label'>Transaction Breakdown</div>", unsafe_allow_html=True)
         txn_counts = (
             filtered["Transaction Type"].value_counts()
             .reindex(TRANSACTION_ORDER, fill_value=0).reset_index()
         )
         txn_counts.columns = ["Type", "Count"]
         txn_counts = txn_counts[txn_counts["Count"] > 0]
-        fig = px.pie(txn_counts, names="Type", values="Count", color="Type",
-                     color_discrete_map=PIE_COLORS, template="plotly_dark", hole=0.45)
-        fig.update_traces(textposition="outside", textinfo="percent+label")
-        fig.update_layout(**_base_layout, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        txn_counts["Label"] = txn_counts["Type"].map(_TXN_LABEL_CLEAN).fillna(txn_counts["Type"])
+        _donut_colors = {
+            "🟢 Buy":   "#22c55e",
+            "🔴 Sell":  "#ef4444",
+            "🔵 Award": "#3b82f6",
+            "⚪ Other": "#64748b",
+        }
+        _total_txn = int(txn_counts["Count"].sum())
+        fig = go.Figure(go.Pie(
+            labels=txn_counts["Label"],
+            values=txn_counts["Count"],
+            marker_colors=[_donut_colors.get(t, "#64748b") for t in txn_counts["Type"]],
+            hole=0.65,
+            textinfo="none",
+            hovertemplate="<b>%{label}</b><br>%{value} transactions<br>%{percent}<extra></extra>",
+        ))
+        fig.add_annotation(
+            text=f"<b>{_total_txn:,}</b><br><span style='font-size:10px'>total</span>",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(color="#e2e8f0", size=20, family="Inter"),
+            align="center",
+        )
+        fig.update_layout(
+            **_BASE_LAYOUT,
+            showlegend=True,
+            legend=dict(
+                orientation="v", x=1.02, y=0.5,
+                xanchor="left", yanchor="middle",
+                bgcolor=_TRANSPARENT,
+                font=dict(color="#94a3b8", size=11),
+                itemsizing="constant",
+                traceorder="normal",
+            ),
+            margin=dict(l=0, r=80, t=14, b=0),
+        )
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
+    # ── Top 10 Locations — horizontal bar chart ───────────────────────────────
     with col_bar:
-        st.markdown("**Top 10 Locations**")
+        st.markdown("<div class='section-label'>Top 10 Locations</div>", unsafe_allow_html=True)
         top_locs = filtered["Location"].value_counts().head(10).reset_index()
         top_locs.columns = ["Location", "Filings"]
-        fig = px.bar(top_locs, x="Filings", y="Location", orientation="h",
-                     color="Filings", color_continuous_scale="Blues", template="plotly_dark")
-        fig.update_layout(**_base_layout,
-                          yaxis=dict(autorange="reversed", showgrid=False),
-                          xaxis=dict(gridcolor="#1f2937"), coloraxis_showscale=False)
-        st.plotly_chart(fig, use_container_width=True)
+        top_locs = top_locs.sort_values("Filings", ascending=True)
+        _n = len(top_locs)
+        _bar_colors = [
+            f"rgba({int(37 + (6-37)*i/max(_n-1,1))},{int(99 + (182-99)*i/max(_n-1,1))},{int(235 + (212-235)*i/max(_n-1,1))},0.85)"
+            for i in range(_n)
+        ]
+        fig = go.Figure(go.Bar(
+            x=top_locs["Filings"],
+            y=top_locs["Location"],
+            orientation="h",
+            marker=dict(color=_bar_colors, line=dict(width=0)),
+            text=top_locs["Filings"],
+            textposition="outside",
+            textfont=dict(color="#4b6080", size=11),
+            hovertemplate="<b>%{y}</b><br>%{x} filings<extra></extra>",
+            cliponaxis=False,
+        ))
+        fig.update_layout(
+            **_BASE_LAYOUT,
+            yaxis=dict(**_AXIS_BASE, showgrid=False, showline=False, tickfont=dict(color="#94a3b8", size=11)),
+            xaxis=dict(**_AXIS_BASE, showgrid=True, showticklabels=False),
+            bargap=0.35,
+        )
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
+    # ── Insider Activity by Sector — grouped bar chart ────────────────────────
     sector_df = filtered[
         filtered["Sector"].notna() &
         (filtered["Sector"] != "Unknown") &
         filtered["Transaction Type"].isin(["🟢 Buy", "🔴 Sell"])
     ]
     if not sector_df.empty:
-        st.markdown("**Insider Activity by Sector**")
-        sc = sector_df.groupby(["Sector", "Transaction Type"]).size().reset_index(name="Count")
-        fig = px.bar(sc, x="Sector", y="Count", color="Transaction Type",
-                     barmode="group", color_discrete_map=PIE_COLORS, template="plotly_dark")
+        st.markdown("<div class='section-label'>Insider Activity by Sector</div>", unsafe_allow_html=True)
+        sc = sector_df.copy()
+        sc["TxnLabel"] = sc["Transaction Type"].map(_TXN_LABEL_CLEAN)
+        sc = sc.groupby(["Sector", "TxnLabel"]).size().reset_index(name="Count")
+        fig = go.Figure()
+        for txn_label, color in [("Buy", "#22c55e"), ("Sell", "#ef4444")]:
+            sub = sc[sc["TxnLabel"] == txn_label]
+            if sub.empty:
+                continue
+            fig.add_trace(go.Bar(
+                x=sub["Sector"], y=sub["Count"],
+                name=txn_label,
+                marker=dict(color=color, opacity=0.85, line=dict(width=0)),
+                hovertemplate="<b>%{x}</b><br>" + txn_label + ": %{y}<extra></extra>",
+            ))
         fig.update_layout(
-            margin=dict(l=0, r=0, t=10, b=0),
-            plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=280,
-            xaxis=dict(gridcolor="#1f2937"), yaxis=dict(gridcolor="#1f2937"),
-            legend=dict(bgcolor="rgba(0,0,0,0)"),
+            **_BASE_LAYOUT,
+            height=280,
+            barmode="group",
+            bargap=0.28,
+            bargroupgap=0.08,
+            xaxis=dict(**_AXIS_BASE, showgrid=False, tickangle=-30, tickfont=dict(color="#94a3b8", size=11)),
+            yaxis=dict(**_AXIS_BASE, showgrid=True),
+            legend=dict(
+                orientation="h", x=1, y=1,
+                xanchor="right", yanchor="bottom",
+                bgcolor=_TRANSPARENT,
+                font=dict(color="#94a3b8", size=11),
+                itemsizing="constant",
+            ),
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=_CHART_CONFIG)
 
     st.markdown("---")
 
@@ -1319,7 +1442,7 @@ for _, row in display.iterrows():
 
 table_html = f"""
 <div style="overflow-x:hidden; max-height:560px; overflow-y:auto;
-            border:1px solid #1f2937; border-radius:12px; width:100%;">
+            border:1px solid #151f35; border-radius:12px; width:100%;">
   <table class="filing-table">
     <colgroup>
       <col class="col-date">  <col class="col-txn">   <col class="col-exec">
@@ -1427,31 +1550,48 @@ with table_placeholder.container():
             st.warning(f"No price data for {sel_ticker} from {sel_date}.")
         else:
             base_price = chart_data["Close"].iloc[0]
+            end_price  = chart_data["Close"].iloc[-1]
+            line_color = "#22c55e" if end_price >= base_price else "#ef4444"
             fig_chart  = go.Figure()
             fig_chart.add_trace(go.Scatter(
                 x=chart_data["Date"], y=chart_data["Close"],
-                mode="lines+markers", line=dict(color="#38bdf8", width=2),
-                marker=dict(size=4), name=sel_ticker,
+                mode="lines",
+                line=dict(color=line_color, width=2),
+                fill="tozeroy",
+                fillgradient=dict(
+                    colorscale=[[0, line_color.replace(")", ",0.15)").replace("rgb", "rgba")],
+                                  [1, "rgba(0,0,0,0)"]],
+                    type="vertical",
+                ),
+                hovertemplate="%{x|%b %d}<br><b>$%{y:.2f}</b><extra></extra>",
+                name=sel_ticker,
             ))
             fig_chart.add_vline(
                 x=int(pd.to_datetime(sel_date).timestamp() * 1000),
-                line_dash="dash", line_color="#f59e0b",
-                annotation_text="Transaction date", annotation_font_color="#f59e0b",
+                line_dash="dash", line_color="#d97706", line_width=1,
+                annotation_text="Transaction", annotation_font=dict(color="#d97706", size=11),
+                annotation_position="top right",
             )
             fig_chart.add_hline(
-                y=base_price, line_dash="dot", line_color="#6b7280",
-                annotation_text=f"Entry ${base_price:.2f}", annotation_font_color="#6b7280",
+                y=base_price, line_dash="dot", line_color="#1e3a5f", line_width=1,
+                annotation_text=f"Entry ${base_price:.2f}",
+                annotation_font=dict(color="#3b5280", size=10),
+                annotation_position="bottom right",
             )
             fig_chart.update_layout(
-                template="plotly_dark",
-                plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=30, b=0), height=320,
-                title=dict(text=f"{sel_ticker} — 30 days post-transaction", font=dict(size=14)),
-                xaxis=dict(showgrid=False),
-                yaxis=dict(gridcolor="#1f2937", tickprefix="$"),
+                **_BASE_LAYOUT,
+                height=320,
+                margin=dict(l=0, r=0, t=36, b=0),
+                title=dict(
+                    text=f"{sel_ticker} — 30 days post-transaction",
+                    font=dict(size=13, color="#94a3b8", family="Inter"),
+                    x=0, pad=dict(l=0),
+                ),
+                xaxis=dict(**_AXIS_BASE, showgrid=False, tickformat="%b %d", nticks=8),
+                yaxis=dict(**_AXIS_BASE, showgrid=True, tickprefix="$"),
                 showlegend=False,
             )
-            st.plotly_chart(fig_chart, use_container_width=True)
+            st.plotly_chart(fig_chart, use_container_width=True, config=_CHART_CONFIG)
 
 # ── Hover sparkline tooltip JS (fixed: delayed hide + pointer-events + above row) ──
 components.html("""
