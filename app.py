@@ -1345,7 +1345,7 @@ with charts_placeholder.container():
         ))
         fig.update_layout(
             **_BASE_LAYOUT,
-            yaxis=dict(**_AXIS_BASE, showgrid=False, showline=False, tickfont=dict(color="#94a3b8", size=11)),
+            yaxis=dict(**_AXIS_BASE, showgrid=False),
             xaxis=dict(**_AXIS_BASE, showgrid=True, showticklabels=False),
             bargap=0.35,
         )
@@ -1378,7 +1378,7 @@ with charts_placeholder.container():
             barmode="group",
             bargap=0.28,
             bargroupgap=0.08,
-            xaxis=dict(**_AXIS_BASE, showgrid=False, tickangle=-30, tickfont=dict(color="#94a3b8", size=11)),
+            xaxis=dict(**_AXIS_BASE, showgrid=False, tickangle=-30),
             yaxis=dict(**_AXIS_BASE, showgrid=True),
             legend=dict(
                 orientation="h", x=1, y=1,
