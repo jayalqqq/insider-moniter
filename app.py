@@ -5,6 +5,7 @@ import re as _re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime, timedelta
+from urllib.parse import urlencode
 
 import pandas as pd
 import plotly.express as px
@@ -610,6 +611,26 @@ div[class*="st-key-preset_"] button[data-testid*="rimary"] {
     border-radius: 0; padding: 1px 5px; margin-left: 6px;
     vertical-align: middle;
 }
+
+/* ── Watchlist star (table) ── */
+.star-btn {
+    display: inline-block; width: 16px; text-align: center;
+    font-size: 14px; line-height: 1; margin-right: 8px;
+    text-decoration: none !important; vertical-align: middle;
+    transition: color 0.15s ease, transform 0.1s ease;
+}
+.star-btn.star-on  { color: #ffffff; }
+.star-btn.star-off { color: #333333; }
+.star-btn.star-off:hover { color: #8a8a8a; }
+.star-btn.star-on:hover  { color: #cbd5e1; }
+.star-btn:active { transform: scale(0.85); }
+.star-btn.star-disabled { color: #161616; }
+.wl-clear {
+    display: inline-block; margin-top: 8px;
+    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ash); text-decoration: none !important;
+}
+.wl-clear:hover { color: #f87171; }
 
 /* ── Signal tables (clusters, insider scores) ── */
 .signal-wrap { border: 1px solid var(--line); width: 100%; overflow-x: auto; }
@@ -1235,6 +1256,61 @@ def detect_cluster_buys(fdf: pd.DataFrame, window_days: int = 7):
     return clusters, cluster_adsh
 
 
+# ── Watchlist + URL-backed view state ─────────────────────────────────────────
+# The filings table is custom HTML, so the star toggle is a query-param link.
+# A link click reloads the app (new session), so the essential view state lives
+# in the URL and is re-seeded into session_state on load — this keeps the
+# starred set, dates, limit and search intact across star clicks. session_state
+# remains the store the rest of the app reads from.
+_qp = st.query_params
+
+
+def _seed_state(key, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+
+def _qp_date(name, default):
+    v = _qp.get(name)
+    if v:
+        try:
+            return date.fromisoformat(v)
+        except Exception:
+            pass
+    return default
+
+
+_seed_state("start_date", _qp_date("sd", date(2025, 1, 1)))
+_seed_state("end_date",   _qp_date("ed", date.today()))
+try:
+    _lim = int(_qp.get("lim", 200))
+except Exception:
+    _lim = 200
+_seed_state("filing_limit", _lim if _lim in (200, 500, 1000) else 200)
+_seed_state("search_query", _qp.get("q", ""))
+_seed_state("watchlist_only", _qp.get("wlo", "") == "1")
+
+# Watchlist (set of tickers): the URL is the durable source of truth.
+watchlist = {t for t in _qp.get("wl", "").split(",") if t}
+st.session_state["watchlist"] = watchlist
+
+
+def _star_href(new_wl):
+    """Build a query string that preserves the current view + a new watchlist."""
+    params = {
+        "sd":  str(st.session_state["start_date"]),
+        "ed":  str(st.session_state["end_date"]),
+        "lim": str(st.session_state.get("filing_limit", 200)),
+    }
+    if st.session_state.get("search_query"):
+        params["q"] = st.session_state["search_query"]
+    if st.session_state.get("watchlist_only"):
+        params["wlo"] = "1"
+    if new_wl:
+        params["wl"] = ",".join(sorted(new_wl))
+    return "?" + urlencode(params)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── Sidebar part 1 ────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1283,7 +1359,6 @@ with st.sidebar:
     filing_limit = st.radio(
         "Filing Limit",
         options=[200, 500, 1000],
-        index=0,
         horizontal=True,
         key="filing_limit",
         on_change=_fetch_page.clear,
@@ -1410,6 +1485,20 @@ with st.sidebar:
     location_filter = st.text_input("Location", placeholder="e.g. CA, NY, TX")
 
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
+    _wl_n = len(watchlist)
+    st.toggle(
+        f"Watchlist Only ({_wl_n})",
+        key="watchlist_only",
+        disabled=(_wl_n == 0),
+        help="Show only filings from your starred companies",
+    )
+    if _wl_n:
+        st.markdown(
+            f"<a class='wl-clear' href='{_star_href(set())}' target='_self'>Clear watchlist</a>",
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     st.markdown(
         "<div class='sidebar-footer'>"
         "Data: SEC EDGAR &amp; Yahoo Finance<br>"
@@ -1445,6 +1534,8 @@ if _q:
         | _tk.str.contains(_q, na=False, regex=False)
         | _ex.str.contains(_q, na=False, regex=False)
     ]
+if st.session_state.get("watchlist_only") and watchlist:
+    filtered = filtered[filtered["Ticker"].isin(watchlist)]
 
 filtered = filtered.copy()
 filtered["Notable"] = (
@@ -1796,12 +1887,24 @@ for _, row in display.iterrows():
     is_cluster   = row.get("Accession No") in cluster_adsh
     cluster_html = "<span class='cluster-badge'>Cluster</span>" if is_cluster else ""
 
+    # Watchlist star (keyed by ticker). Clicking toggles it via a query-param link.
+    if ticker:
+        if ticker in watchlist:
+            _star_html = (f"<a class='star-btn star-on' href='{_star_href(watchlist - {ticker})}' "
+                          f"target='_self' title='Remove from watchlist'>&#9733;</a>")
+        else:
+            _star_html = (f"<a class='star-btn star-off' href='{_star_href(watchlist | {ticker})}' "
+                          f"target='_self' title='Add to watchlist'>&#9734;</a>")
+    else:
+        _star_html = "<span class='star-btn star-disabled' title='No ticker to watch'>&#9734;</span>"
+
     txn_type   = row["Transaction Type"]
     txn_cell   = TXN_PILL_HTML.get(
         txn_type,
         f"<span class='txn-pill txn-other'>{_html.escape(txn_type)}</span>"
     )
-    co_cell    = f"<span class='co-name'>{_html.escape(row['Company'])}</span>{ticker_html}{cluster_html}"
+    co_cell    = (f"{_star_html}<span class='co-name'>{_html.escape(row['Company'])}</span>"
+                  f"{ticker_html}{cluster_html}")
 
     _spark_key  = (ticker, row.get("Transaction Date") or str(row["Filed"].date())) if ticker else None
     _spark_json = json.dumps(spark_map.get(_spark_key, []))
@@ -1869,16 +1972,31 @@ with table_placeholder.container():
         )
 
     with tbl_right:
-        export_cols = [
-            "Filed", "Transaction Type", "Exec Title", "Executive / Filer",
-            "Company", "Ticker", "Sector", "Shares", "Price Per Share",
+        # Export exactly the current filtered view (all filters incl. watchlist).
+        _exp = filtered.copy()
+        _exp["Date"] = _exp["Filed"].dt.strftime("%Y-%m-%d")
+        _exp["Transaction Type"] = (
+            _exp["Transaction Type"].map(TXN_CLEAN_LABELS).fillna(_exp["Transaction Type"])
+        )
+        _exp["Estimated Value"] = (
+            pd.to_numeric(_exp["Shares"], errors="coerce")
+            * pd.to_numeric(_exp["Price Per Share"], errors="coerce")
+        ).round(2)
+        export_df = _exp[[
+            "Date", "Transaction Type", "Executive / Filer", "Exec Title", "Company",
+            "Ticker", "Sector", "Shares", "Price Per Share", "Estimated Value",
             "7d Return", "30d Return", "90d Return", "Location", "Filing URL",
-        ]
-        export_df = filtered[export_cols].copy()
-        export_df["Filed"] = export_df["Filed"].dt.strftime("%Y-%m-%d")
+        ]].rename(columns={
+            "Executive / Filer": "Executive",
+            "Exec Title": "Title",
+            "Price Per Share": "Price Per Share ($)",
+            "7d Return": "7d Return (%)",
+            "30d Return": "30d Return (%)",
+            "90d Return": "90d Return (%)",
+        })
         st.download_button(
             "Download CSV", export_df.to_csv(index=False),
-            file_name="insider_trades.csv", mime="text/csv",
+            file_name="insider_filings_export.csv", mime="text/csv",
             use_container_width=True,
         )
 
