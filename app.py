@@ -1261,8 +1261,11 @@ if location_filter.strip():
     filtered = filtered[
         filtered["Location"].str.contains(location_filter.strip(), case=False, na=False)
     ]
-if search_query.strip():
-    _q = search_query.strip().lower()
+# Search filter: an empty/blank query is a no-op (keeps ALL rows). Only when the
+# user has actually typed something do we narrow to matching company / ticker /
+# executive. This must never filter to zero rows when the box is empty.
+_q = (search_query or "").strip().lower()
+if _q:
     _co = filtered["Company"].fillna("").str.lower()
     _tk = filtered["Ticker"].fillna("").str.lower()
     _ex = filtered["Executive / Filer"].fillna("").str.lower()
@@ -1298,11 +1301,10 @@ _ratio_display = (
 )
 
 # ── Search result count ───────────────────────────────────────────────────────
-_search_active = bool(search_query.strip())
-_noun = "matching filing" if _search_active else "filing"
+_noun = "matching filing" if _q else "filing"
 _meta = f"{total:,} {_noun}{'' if total == 1 else 's'}"
-if _search_active:
-    _meta += f" &nbsp;·&nbsp; <span class='q'>“{_html.escape(search_query.strip())}”</span>"
+if _q:
+    _meta += f" &nbsp;·&nbsp; <span class='q'>“{_html.escape((search_query or '').strip())}”</span>"
 search_meta_ph.markdown(f"<div class='search-meta'>{_meta}</div>", unsafe_allow_html=True)
 
 # ── Sparkline pre-fetch for hover tooltips ────────────────────────────────────
@@ -1325,61 +1327,64 @@ if _spark_pairs:
             spark_map[_sfmap[_sfut]] = _sfut.result()
 
 # ── Replace KPI skeleton ──────────────────────────────────────────────────────
+# KPI values are rendered directly into the HTML (server-side) so they are
+# always correct and never depend on client-side JS. A one-time count-up
+# animation enhances the first page load; it re-uses the data-target attrs but
+# never resets the displayed number to 0 on Streamlit reruns (e.g. while typing
+# in the search box), which previously left the cards stuck at 0.
 _kpi_html = f"""
 <div class="kpi-grid">
   <div class="kpi-card">
     <div class="kpi-label">Total Filings</div>
-    <div class="kpi-value" data-target="{total}" data-type="int">0</div>
+    <div class="kpi-value" data-target="{total}" data-type="int">{total:,}</div>
     <div class="kpi-desc">Form 4 filings tracked</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Unique Companies</div>
-    <div class="kpi-value" data-target="{companies}" data-type="int">0</div>
+    <div class="kpi-value" data-target="{companies}" data-type="int">{companies:,}</div>
     <div class="kpi-desc">Distinct issuers</div>
   </div>
   <div class="kpi-card kpi-mark-sell">
     <div class="kpi-label">Buy / Sell Ratio</div>
-    <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{"0" if _ratio_num else _ratio_display}</div>
+    <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{_ratio_display}</div>
     <div class="kpi-desc">{buys} buys / {sells} sells</div>
   </div>
   <div class="kpi-card kpi-mark-buy">
     <div class="kpi-label">Notable Buys</div>
-    <div class="kpi-value" data-target="{notable_buys}" data-type="int">0</div>
+    <div class="kpi-value" data-target="{notable_buys}" data-type="int">{notable_buys:,}</div>
     <div class="kpi-desc">CEO / CFO / President buying</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Latest Filing</div>
-    <div class="kpi-value" data-type="date" style="font-size:1.5rem;opacity:0;">{latest_str}</div>
+    <div class="kpi-value" data-type="date" style="font-size:1.5rem;">{latest_str}</div>
     <div class="kpi-desc">Most recent submission</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Sectors Covered</div>
-    <div class="kpi-value" data-target="{sectors_n}" data-type="int">0</div>
+    <div class="kpi-value" data-target="{sectors_n}" data-type="int">{sectors_n:,}</div>
     <div class="kpi-desc">Industries represented</div>
   </div>
 </div>
 """
 kpi_placeholder.markdown(_kpi_html, unsafe_allow_html=True)
 
-# ── Counter animation ─────────────────────────────────────────────────────────
+# ── Counter animation (first load only; values already correct in HTML) ───────
 components.html("""
 <script>
 (function() {
   var p  = window.parent ? window.parent : window;
   var pd = p.document;
-  var reduced = p.matchMedia && p.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduced) {
-    pd.querySelectorAll('.kpi-value[data-type="date"]').forEach(function(el) {
-      el.style.opacity = '1';
-    });
-    return;
-  }
-  var DUR = 1500;
+  // Numbers are already server-rendered. Animate a count-up once per page load;
+  // on later reruns leave the real values untouched (no reset to 0).
+  if (p.__kpiAnimated) return;
+  if (p.matchMedia && p.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  p.__kpiAnimated = true;
+  var DUR = 1400;
   function easeOut(t) { return 1 - Math.pow(1 - t, 3); }
   setTimeout(function() {
     pd.querySelectorAll('.kpi-value[data-type="int"]').forEach(function(el) {
       var target = parseInt(el.dataset.target, 10);
-      if (isNaN(target)) return;
+      if (isNaN(target) || target <= 0) return;
       var t0 = p.performance.now();
       (function tick(now) {
         var prog = Math.min((now - t0) / DUR, 1);
@@ -1397,10 +1402,6 @@ components.html("""
         el.textContent = prog < 1 ? (easeOut(prog) * target).toFixed(1) + ':1' : final;
         if (prog < 1) p.requestAnimationFrame(tick);
       })(p.performance.now());
-    });
-    pd.querySelectorAll('.kpi-value[data-type="date"]').forEach(function(el) {
-      el.style.transition = 'opacity 0.9s ease-out';
-      el.style.opacity = '1';
     });
   }, 120);
 })();
