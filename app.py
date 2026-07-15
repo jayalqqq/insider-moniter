@@ -542,6 +542,44 @@ h2 { color: #e0e0e0 !important; font-family: var(--font-mono) !important;
     .about-col.about-side { border-left: none; padding-left: 0;
         border-top: 1px solid var(--line); padding-top: 28px; }
 }
+
+/* ── Search bar ── */
+.st-key-search_query input {
+    width: 100% !important;
+    background: #0a0a0a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238a8a8a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E") no-repeat 20px center !important;
+    border: 1px solid var(--line-2) !important;
+    border-radius: 0 !important;
+    height: 60px !important;
+    font-family: var(--font-body) !important;
+    font-size: 15px !important;
+    color: #f1f5f9 !important;
+    padding: 0 20px 0 54px !important;
+    letter-spacing: 0.01em;
+    transition: border-color 0.18s ease !important;
+}
+.st-key-search_query input::placeholder { color: var(--ash) !important; }
+.st-key-search_query input:focus {
+    border-color: #ffffff !important;
+    box-shadow: none !important;
+}
+.st-key-clear_search button {
+    height: 60px !important;
+    border-radius: 0 !important;
+    border: 1px solid var(--line-2) !important;
+    color: var(--fog) !important;
+    font-size: 15px !important;
+    letter-spacing: 0 !important;
+    padding: 0 !important;
+}
+.st-key-clear_search button:hover {
+    background: #fff !important; color: #000 !important; border-color: #fff !important;
+}
+.search-meta {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ash); margin: 14px 2px 44px;
+}
+.search-meta .q { color: #e8e8e8; text-transform: none; letter-spacing: 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1108,6 +1146,23 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Search bar ────────────────────────────────────────────────────────────────
+def _clear_search():
+    st.session_state["search_query"] = ""
+
+_sc_input, _sc_clear = st.columns([13, 1], gap="small")
+with _sc_input:
+    search_query = st.text_input(
+        "Search filings",
+        key="search_query",
+        placeholder="Search by company, ticker, or executive...",
+        label_visibility="collapsed",
+    )
+with _sc_clear:
+    st.button("✕", key="clear_search", on_click=_clear_search,
+              help="Clear search", use_container_width=True)
+search_meta_ph = st.empty()
+
 # ── Skeleton placeholders ─────────────────────────────────────────────────────
 _SKEL_KPI = """
 <div class="skel-kpi-grid">
@@ -1206,6 +1261,16 @@ if location_filter.strip():
     filtered = filtered[
         filtered["Location"].str.contains(location_filter.strip(), case=False, na=False)
     ]
+if search_query.strip():
+    _q = search_query.strip().lower()
+    _co = filtered["Company"].fillna("").str.lower()
+    _tk = filtered["Ticker"].fillna("").str.lower()
+    _ex = filtered["Executive / Filer"].fillna("").str.lower()
+    filtered = filtered[
+        _co.str.contains(_q, na=False, regex=False)
+        | _tk.str.contains(_q, na=False, regex=False)
+        | _ex.str.contains(_q, na=False, regex=False)
+    ]
 
 filtered = filtered.copy()
 filtered["Notable"] = (
@@ -1231,6 +1296,14 @@ _ratio_num     = round(buys / sells, 1) if sells > 0 else None
 _ratio_display = (
     f"{_ratio_num}:1" if _ratio_num is not None else ("∞" if buys > 0 else "—")
 )
+
+# ── Search result count ───────────────────────────────────────────────────────
+_search_active = bool(search_query.strip())
+_noun = "matching filing" if _search_active else "filing"
+_meta = f"{total:,} {_noun}{'' if total == 1 else 's'}"
+if _search_active:
+    _meta += f" &nbsp;·&nbsp; <span class='q'>“{_html.escape(search_query.strip())}”</span>"
+search_meta_ph.markdown(f"<div class='search-meta'>{_meta}</div>", unsafe_allow_html=True)
 
 # ── Sparkline pre-fetch for hover tooltips ────────────────────────────────────
 # Cap the rendered table at 500 rows for DOM performance; KPIs, charts and the
