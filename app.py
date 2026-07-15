@@ -144,7 +144,7 @@ div[data-baseweb="tag"] {
 /* ── KPI Grid — boxed hairline grid ── */
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     gap: 1px;
     background: var(--line);
     border: 1px solid var(--line);
@@ -167,8 +167,9 @@ div[data-baseweb="tag"] {
 }
 .kpi-card:hover           { background: #080808; }
 .kpi-card:hover::before   { transform: scaleX(1); }
-.kpi-card.kpi-mark-buy::before  { background: var(--buy-solid); }
-.kpi-card.kpi-mark-sell::before { background: var(--sell-solid); }
+.kpi-card.kpi-mark-buy::before     { background: var(--buy-solid); }
+.kpi-card.kpi-mark-sell::before    { background: var(--sell-solid); }
+.kpi-card.kpi-mark-cluster::before { background: #f59e0b; }
 
 .kpi-label {
     font-family: var(--font-mono);
@@ -190,8 +191,8 @@ div[data-baseweb="tag"] {
     font-size: 9.5px; margin-top: 12px; line-height: 1.5;
     text-transform: uppercase; letter-spacing: 0.04em;
 }
-@media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 640px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1200px) { .kpi-grid { grid-template-columns: repeat(4, 1fr); } }
+@media (max-width: 720px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* ── Live pulse ── */
 @keyframes livePulse {
@@ -580,6 +581,72 @@ h2 { color: #e0e0e0 !important; font-family: var(--font-mono) !important;
     color: var(--ash); margin: 14px 2px 44px;
 }
 .search-meta .q { color: #e8e8e8; text-transform: none; letter-spacing: 0; }
+
+/* ── Date preset pills ── */
+.preset-label {
+    font-family: var(--font-mono);
+    font-size: 10px; font-weight: 500; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ash); margin: 2px 0 8px;
+}
+div[class*="st-key-preset_"] button {
+    height: 30px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    font-size: 10px !important;
+    letter-spacing: 0.06em !important;
+    border-radius: 0 !important;
+}
+div[class*="st-key-preset_"] button[kind="primary"],
+div[class*="st-key-preset_"] button[data-testid*="rimary"] {
+    background: #fff !important;
+    color: #000 !important;
+    border-color: #fff !important;
+}
+
+/* ── Cluster badge (table) ── */
+.cluster-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 8px; font-weight: 600; letter-spacing: 0.1em;
+    color: #f59e0b; text-transform: uppercase;
+    border: 1px solid rgba(245,158,11,0.45);
+    border-radius: 0; padding: 1px 5px; margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* ── Signal tables (clusters, insider scores) ── */
+.signal-wrap { border: 1px solid var(--line); width: 100%; overflow-x: auto; }
+.signal-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.signal-table th {
+    text-align: left; padding: 12px 16px;
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.12em; color: var(--ash);
+    border-bottom: 1px solid var(--line-2); white-space: nowrap;
+    background: #000;
+}
+.signal-table td {
+    padding: 13px 16px; border-bottom: 1px solid #101010;
+    color: #c4c4c4; vertical-align: middle;
+}
+.signal-table tbody tr:last-child td { border-bottom: none; }
+.signal-table tr:hover td { background: #0b0b0b; }
+.signal-table .rank {
+    font-family: var(--font-display); font-size: 15px; color: var(--ash);
+    width: 44px; font-variant-numeric: tabular-nums;
+}
+.signal-table td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.signal-table th.num { text-align: right; }
+.signal-co   { color: #fff; font-weight: 600; }
+.signal-sub  { color: var(--ash); font-family: var(--font-mono); font-size: 10px;
+               letter-spacing: 0.04em; margin-top: 2px; }
+.signal-dates{ font-family: var(--font-mono); font-size: 11px; color: var(--fog); white-space: nowrap; }
+.ret-pos { color: #4ade80; font-weight: 600; font-variant-numeric: tabular-nums; }
+.ret-neg { color: #f87171; font-weight: 600; font-variant-numeric: tabular-nums; }
+.signal-empty {
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    padding: 24px 16px; border: 1px solid var(--line);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1080,6 +1147,97 @@ components.html("""
 # ── Sidebar divider helper ─────────────────────────────────────────────────────
 _GRAD_DIV = '<div class="sidebar-div"></div>'
 
+# ── Date range presets ─────────────────────────────────────────────────────────
+DATE_PRESETS = ["7D", "30D", "90D", "YTD", "1Y"]
+
+
+def _preset_range(preset: str):
+    """Return (start, end) dates for a named preset."""
+    today = date.today()
+    if preset == "7D":
+        return today - timedelta(days=7), today
+    if preset == "30D":
+        return today - timedelta(days=30), today
+    if preset == "90D":
+        return today - timedelta(days=90), today
+    if preset == "YTD":
+        return date(today.year, 1, 1), today
+    if preset == "1Y":
+        return today - timedelta(days=365), today
+    return None, None
+
+
+def _apply_preset(preset: str):
+    """on_click callback: set the date pickers to the preset and refresh."""
+    s, e = _preset_range(preset)
+    if s is not None:
+        st.session_state["start_date"] = s
+        st.session_state["end_date"] = e
+        _fetch_page.clear()
+
+
+def _active_preset(start, end):
+    """Which preset (if any) exactly matches the current start/end dates."""
+    for p in DATE_PRESETS:
+        if (start, end) == _preset_range(p):
+            return p
+    return None
+
+
+# ── Cluster-buy detection ──────────────────────────────────────────────────────
+def detect_cluster_buys(fdf: pd.DataFrame, window_days: int = 7):
+    """Find same-company Buy clusters: 2+ distinct insiders buying within a
+    rolling `window_days` window. Returns (clusters, accession-number set)."""
+    clusters: list = []
+    cluster_adsh: set = set()
+    buys = fdf[fdf["Transaction Type"] == "🟢 Buy"].copy()
+    if buys.empty:
+        return clusters, cluster_adsh
+
+    def _cluster_date(r):
+        td = r.get("Transaction Date")
+        if td:
+            try:
+                return pd.to_datetime(td).date()
+            except Exception:
+                pass
+        f = r.get("Filed")
+        return f.date() if pd.notna(f) else None
+
+    buys["_cd"] = buys.apply(_cluster_date, axis=1)
+    buys = buys[buys["_cd"].notna()]
+
+    def _flush(company, window):
+        insiders = {r["Executive / Filer"] for r in window}
+        if len(insiders) >= 2:
+            clusters.append({
+                "company":  company,
+                "insiders": len(insiders),
+                "shares":   sum(float(r["Shares"]) for r in window if pd.notna(r.get("Shares"))),
+                "start":    min(r["_cd"] for r in window),
+                "end":      max(r["_cd"] for r in window),
+                "buys":     len(window),
+            })
+            for r in window:
+                if r.get("Accession No"):
+                    cluster_adsh.add(r["Accession No"])
+
+    for company, grp in buys.groupby("Company"):
+        grp = grp.sort_values("_cd")
+        window, start_d = [], None
+        for _, row in grp.iterrows():
+            d = row["_cd"]
+            if start_d is None or (d - start_d).days > window_days:
+                _flush(company, window)
+                window, start_d = [row], d
+            else:
+                window.append(row)
+        _flush(company, window)
+
+    clusters.sort(key=lambda c: (c["insiders"], c["shares"]), reverse=True)
+    return clusters, cluster_adsh
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── Sidebar part 1 ────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1092,11 +1250,27 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
+
+    # seed date state once, so preset buttons and pickers share it
+    st.session_state.setdefault("start_date", date(2025, 1, 1))
+    st.session_state.setdefault("end_date", date.today())
+
+    st.markdown("<div class='preset-label'>Quick Range</div>", unsafe_allow_html=True)
+    _active = _active_preset(st.session_state["start_date"], st.session_state["end_date"])
+    _pcols = st.columns(len(DATE_PRESETS))
+    for _i, _p in enumerate(DATE_PRESETS):
+        with _pcols[_i]:
+            st.button(
+                _p, key=f"preset_{_p}",
+                type="primary" if _active == _p else "secondary",
+                on_click=_apply_preset, args=(_p,),
+                use_container_width=True,
+            )
+
     col_s, col_e = st.columns(2)
     with col_s:
         start_date = st.date_input(
             "Start",
-            value=date(2025, 1, 1),
             max_value=date.today(),
             key="start_date",
             on_change=_fetch_page.clear,
@@ -1104,7 +1278,6 @@ with st.sidebar:
     with col_e:
         end_date = st.date_input(
             "End",
-            value=date.today(),
             max_value=date.today(),
             key="end_date",
             on_change=_fetch_page.clear,
@@ -1169,6 +1342,7 @@ _SKEL_KPI = """
   <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
   <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
   <div class="skel-kpi shimmer"></div><div class="skel-kpi shimmer"></div>
+  <div class="skel-kpi shimmer"></div>
 </div>"""
 
 _SKEL_CHARTS = """
@@ -1281,6 +1455,10 @@ filtered["Notable"] = (
     filtered["Exec Title"].apply(lambda t: bool(NOTABLE_RE.search(str(t))))
 )
 
+# ── Cluster-buy detection (respects all active filters) ───────────────────────
+cluster_list, cluster_adsh = detect_cluster_buys(filtered)
+cluster_count = len(cluster_list)
+
 # ── KPI values ────────────────────────────────────────────────────────────────
 total        = len(filtered)
 companies    = filtered["Company"].nunique()
@@ -1353,6 +1531,11 @@ _kpi_html = f"""
     <div class="kpi-label">Notable Buys</div>
     <div class="kpi-value" data-target="{notable_buys}" data-type="int">{notable_buys:,}</div>
     <div class="kpi-desc">CEO / CFO / President buying</div>
+  </div>
+  <div class="kpi-card kpi-mark-cluster">
+    <div class="kpi-label">Cluster Buys</div>
+    <div class="kpi-value" data-target="{cluster_count}" data-type="int">{cluster_count:,}</div>
+    <div class="kpi-desc">Coordinated insider buying</div>
   </div>
   <div class="kpi-card">
     <div class="kpi-label">Latest Filing</div>
@@ -1613,12 +1796,15 @@ for _, row in display.iterrows():
     sector     = row.get("Sector", "Unknown") or "Unknown"
     sector_lbl = sector if sector != "Unknown" else "—"
 
+    is_cluster   = row.get("Accession No") in cluster_adsh
+    cluster_html = "<span class='cluster-badge'>Cluster</span>" if is_cluster else ""
+
     txn_type   = row["Transaction Type"]
     txn_cell   = TXN_PILL_HTML.get(
         txn_type,
         f"<span class='txn-pill txn-other'>{_html.escape(txn_type)}</span>"
     )
-    co_cell    = f"<span class='co-name'>{_html.escape(row['Company'])}</span>{ticker_html}"
+    co_cell    = f"<span class='co-name'>{_html.escape(row['Company'])}</span>{ticker_html}{cluster_html}"
 
     _spark_key  = (ticker, row.get("Transaction Date") or str(row["Filed"].date())) if ticker else None
     _spark_json = json.dumps(spark_map.get(_spark_key, []))
@@ -1800,6 +1986,89 @@ with table_placeholder.container():
             )
             fig_chart.update_layout(height=320, margin_t=36)
             st.plotly_chart(fig_chart, use_container_width=True, config=_CHART_CONFIG)
+
+# ── Cluster Buy Signals ───────────────────────────────────────────────────────
+st.markdown("---")
+st.markdown("<div class='section-label'>Cluster Buy Signals</div>", unsafe_allow_html=True)
+if cluster_list:
+    _crows = ""
+    for _i, _c in enumerate(cluster_list, 1):
+        _dr = _c["start"].strftime("%b %d, %Y")
+        if _c["end"] != _c["start"]:
+            _dr += " – " + _c["end"].strftime("%b %d, %Y")
+        _crows += (
+            f"<tr><td class='rank'>{_i:02d}</td>"
+            f"<td><span class='signal-co'>{_html.escape(_c['company'])}</span></td>"
+            f"<td class='num'>{_c['insiders']}</td>"
+            f"<td class='num'>{_c['buys']}</td>"
+            f"<td class='num'>{_c['shares']:,.0f}</td>"
+            f"<td class='signal-dates'>{_dr}</td></tr>"
+        )
+    st.markdown(
+        "<div class='signal-wrap'><table class='signal-table'>"
+        "<thead><tr><th>#</th><th>Company</th>"
+        "<th class='num'>Insiders</th><th class='num'>Buys</th>"
+        "<th class='num'>Total Shares</th><th>Window</th></tr></thead>"
+        f"<tbody>{_crows}</tbody></table></div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='font-family:var(--font-mono);font-size:9.5px;color:#3a3a3a;"
+        "text-transform:uppercase;letter-spacing:0.06em;margin-top:12px;'>"
+        "A cluster is 2 or more different insiders buying the same company's stock within "
+        "7 days — a stronger bullish signal than any single purchase.</div>",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        "<div class='signal-empty'>No cluster buys detected in the current view.</div>",
+        unsafe_allow_html=True,
+    )
+
+# ── Top Performing Insiders (Insider Score) ───────────────────────────────────
+st.markdown("---")
+st.markdown("<div class='section-label'>Top Performing Insiders</div>", unsafe_allow_html=True)
+_perf = filtered[(filtered["Transaction Type"] == "🟢 Buy") & filtered["30d Return"].notna()]
+_score = (
+    _perf.groupby(["Executive / Filer", "Company"])
+    .agg(n=("30d Return", "size"), avg=("30d Return", "mean"))
+    .reset_index()
+) if not _perf.empty else pd.DataFrame()
+if not _score.empty:
+    _score = _score[_score["n"] >= 2].sort_values("avg", ascending=False).head(15)
+if not _score.empty:
+    _srows = ""
+    for _i, (_, _r) in enumerate(_score.iterrows(), 1):
+        _av   = float(_r["avg"])
+        _cls  = "ret-pos" if _av >= 0 else "ret-neg"
+        _sign = "+" if _av >= 0 else ""
+        _srows += (
+            f"<tr><td class='rank'>{_i:02d}</td>"
+            f"<td><span class='signal-co'>{_html.escape(str(_r['Executive / Filer']))}</span>"
+            f"<div class='signal-sub'>{_html.escape(str(_r['Company']))}</div></td>"
+            f"<td class='num'>{int(_r['n'])}</td>"
+            f"<td class='num {_cls}'>{_sign}{_av:.1f}%</td></tr>"
+        )
+    st.markdown(
+        "<div class='signal-wrap'><table class='signal-table'>"
+        "<thead><tr><th>#</th><th>Insider</th>"
+        "<th class='num'>Buys Tracked</th><th class='num'>Avg 30D Return</th></tr></thead>"
+        f"<tbody>{_srows}</tbody></table></div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<div style='font-family:var(--font-mono);font-size:9.5px;color:#3a3a3a;"
+        "text-transform:uppercase;letter-spacing:0.06em;margin-top:12px;'>"
+        "Average 30-day stock return following each insider's buys · minimum 2 tracked "
+        "buys · ranked by average gain.</div>",
+        unsafe_allow_html=True,
+    )
+else:
+    st.markdown(
+        "<div class='signal-empty'>Not enough tracked buys yet — insiders need at least "
+        "2 buys with 30-day return data in the current view.</div>",
+        unsafe_allow_html=True,
+    )
 
 # ── About section ─────────────────────────────────────────────────────────────
 st.markdown("---")
