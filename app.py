@@ -17,9 +17,19 @@ import streamlit.components.v1 as components
 import yfinance as yf
 
 # ── Page config ───────────────────────────────────────────────────────────────
+# Favicon: the INSIDER ✦ mark (white sparkle on black). Load the committed PNG
+# by an absolute path so it resolves on Streamlit Cloud; fall back to the ✦ glyph
+# if the file is ever missing.
+_FAVICON = pathlib.Path(__file__).parent / "favicon.png"
+try:
+    from PIL import Image as _PILImage
+    _page_icon = _PILImage.open(_FAVICON) if _FAVICON.exists() else "✦"
+except Exception:
+    _page_icon = "✦"
+
 st.set_page_config(
-    page_title="SEC Insider Trading Monitor",
-    page_icon="📈",
+    page_title="INSIDER — SEC Form 4 Intelligence",
+    page_icon=_page_icon,
     layout="wide",
     initial_sidebar_state="expanded",
 )
