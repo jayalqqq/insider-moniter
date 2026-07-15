@@ -301,14 +301,10 @@ div[data-baseweb="tag"] {
 .hero-topline .right { text-align: right; }
 .hero-headline {
     font-family: var(--font-display);
-    font-weight: 600;
+    font-weight: 700;
     font-size: clamp(42px, 8.6vw, 116px);
     line-height: 0.9; letter-spacing: -0.035em;
     color: #fff; margin: 0; text-transform: uppercase;
-}
-.hero-headline .outline {
-    -webkit-text-stroke: 1.4px #fff;
-    color: transparent;
 }
 .hero-foot {
     display: flex; justify-content: space-between; align-items: flex-end;
@@ -498,6 +494,54 @@ hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
 h2 { color: #e0e0e0 !important; font-family: var(--font-mono) !important;
      font-size: 12px !important; font-weight: 500 !important;
      letter-spacing: 0.12em !important; text-transform: uppercase !important; }
+
+/* ── About section ── */
+.about-section { margin-top: 8px; }
+.about-grid {
+    display: grid; grid-template-columns: 1.7fr 1fr; gap: 56px;
+    border-top: 1px solid var(--line); padding-top: 32px;
+}
+.about-h {
+    font-family: var(--font-mono);
+    font-size: 10px; font-weight: 600; letter-spacing: 0.14em;
+    text-transform: uppercase; color: #e8e8e8;
+    margin: 0 0 12px 0;
+}
+.about-p {
+    font-family: var(--font-body);
+    font-size: 14px; line-height: 1.7; color: var(--fog);
+    margin: 0 0 28px 0; max-width: 640px;
+}
+.about-col.about-side { border-left: 1px solid var(--line); padding-left: 40px; }
+.about-name {
+    font-family: var(--font-display);
+    font-size: 22px; font-weight: 600; color: #fff;
+    margin: 0 0 6px 0; letter-spacing: -0.01em;
+}
+.about-meta {
+    font-family: var(--font-mono);
+    font-size: 11px; line-height: 1.7; color: var(--ash);
+    text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 24px 0;
+}
+.about-link {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #fff; text-decoration: none;
+    border: 1px solid var(--line-2); padding: 10px 16px;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.about-link:hover { background: #fff; color: #000; border-color: #fff; }
+.about-disclaimer {
+    font-family: var(--font-mono);
+    font-size: 9px; color: var(--dim); letter-spacing: 0.06em;
+    text-transform: uppercase; margin: 22px 0 0 0; line-height: 1.7;
+}
+@media (max-width: 820px) {
+    .about-grid { grid-template-columns: 1fr; gap: 32px; }
+    .about-col.about-side { border-left: none; padding-left: 0;
+        border-top: 1px solid var(--line); padding-top: 28px; }
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -758,10 +802,15 @@ def _get_sparkline_prices(ticker: str, ref_date_str: str) -> list:
 
 
 # ── EDGAR filing fetch (TTL 5 min) ────────────────────────────────────────────
+# The EDGAR full-text search API returns up to 100 hits per request; paginate
+# with the `from` offset until we reach `limit`. `_status` is prefixed with an
+# underscore so st.cache_data ignores it when hashing (progress is only shown
+# on a cache miss). Results are de-duplicated by accession number.
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_filings(start_dt: str, end_dt: str) -> pd.DataFrame:
-    hits, page, per_page = [], 0, 10
-    while len(hits) < MAX_RESULTS:
+def fetch_filings(start_dt: str, end_dt: str, limit: int = MAX_RESULTS, _status=None) -> pd.DataFrame:
+    hits, seen, page, per_page = [], set(), 0, 100
+    # EDGAR caps the `from` offset at 10,000 (100 pages of 100)
+    while len(hits) < limit and page < 100:
         params = {
             "q": '"form 4"', "forms": "4", "dateRange": "custom",
             "startdt": start_dt, "enddt": end_dt, "from": page * per_page,
@@ -776,11 +825,19 @@ def fetch_filings(start_dt: str, end_dt: str) -> pd.DataFrame:
         batch = data.get("hits", {}).get("hits", [])
         if not batch:
             break
-        hits.extend(batch)
+        for h in batch:
+            adsh = h.get("_source", {}).get("adsh", "")
+            if adsh and adsh in seen:
+                continue
+            seen.add(adsh)
+            hits.append(h)
         page += 1
+        if _status is not None:
+            loaded = min(len(hits), limit)
+            _status.progress(min(loaded / limit, 1.0), text=f"Loading filings… {loaded}/{limit}")
         if len(batch) < per_page:
             break
-    return _parse_hits(hits)
+    return _parse_hits(hits[:limit])
 
 
 def _parse_hits(hits: list) -> pd.DataFrame:
@@ -1008,6 +1065,15 @@ with st.sidebar:
             on_change=fetch_filings.clear,
         )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
+    filing_limit = st.radio(
+        "Filing Limit",
+        options=[200, 500, 1000],
+        index=0,
+        horizontal=True,
+        key="filing_limit",
+        on_change=fetch_filings.clear,
+    )
+    st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     refresh = st.button("Refresh Data", use_container_width=True)
     if refresh:
         st.cache_data.clear()
@@ -1021,7 +1087,7 @@ st.markdown(
     <div class="left">SEC EDGAR<br>Form 4 Filings</div>
     <div class="right">Insider<br>Intelligence</div>
   </div>
-  <h1 class="hero-headline">Track What<br><span class="outline">Insiders</span> Know</h1>
+  <h1 class="hero-headline">Track What<br>Insiders Know</h1>
   <div class="hero-foot">
     <p class="hero-sub">Real-time SEC Form 4 filings — see exactly when executives buy and sell shares in their own companies, and what the stock did next.</p>
     <div class="hero-meta">
@@ -1061,8 +1127,9 @@ charts_placeholder.markdown(_SKEL_CHARTS, unsafe_allow_html=True)
 table_placeholder.markdown(_SKEL_TABLE,   unsafe_allow_html=True)
 
 # ── Fetch & enrich ────────────────────────────────────────────────────────────
-with st.spinner("Fetching filings from SEC EDGAR…"):
-    df = fetch_filings(str(start_date), str(end_date))
+_fetch_prog = st.progress(0.0, text=f"Loading filings… 0/{filing_limit}")
+df = fetch_filings(str(start_date), str(end_date), filing_limit, _status=_fetch_prog)
+_fetch_prog.empty()
 
 if df.empty:
     kpi_placeholder.empty()
@@ -1159,7 +1226,9 @@ _ratio_display = (
 )
 
 # ── Sparkline pre-fetch for hover tooltips ────────────────────────────────────
-display = filtered.head(200).copy()
+# Cap the rendered table at 500 rows for DOM performance; KPIs, charts and the
+# CSV export still use the full fetched set.
+display = filtered.head(min(filing_limit, 500)).copy()
 display["Filed_str"] = display["Filed"].dt.strftime("%Y-%m-%d").fillna("—")
 
 _spark_pairs = list(dict.fromkeys(
@@ -1367,7 +1436,7 @@ with charts_placeholder.container():
                 orientation="v", x=1.02, y=0.5,
                 xanchor="left", yanchor="middle",
                 bgcolor=_TRANSPARENT,
-                font=dict(color="#8a8a8a", size=10, family="IBM Plex Mono, monospace"),
+                font=dict(color="#e8e8e8", size=11, family="IBM Plex Mono, monospace"),
                 itemsizing="constant",
                 traceorder="normal",
             ),
@@ -1382,10 +1451,12 @@ with charts_placeholder.container():
         top_locs.columns = ["Location", "Filings"]
         top_locs = top_locs.sort_values("Filings", ascending=True)
         _n = len(top_locs)
-        # greyscale ramp: brightest bar = largest count (top), fading to dim
+        # blue -> cyan gradient (#2563eb -> #06b6d4); largest bar (top) = cyan
+        def _lerp(a, b, t):
+            return int(round(a + (b - a) * t))
         _bar_colors = [
-            f"rgb({v},{v},{v})"
-            for v in (int(70 + (235 - 70) * i / max(_n - 1, 1)) for i in range(_n))
+            f"rgb({_lerp(37, 6, t)},{_lerp(99, 182, t)},{_lerp(235, 212, t)})"
+            for t in (i / max(_n - 1, 1) for i in range(_n))
         ]
         fig = go.Figure(go.Bar(
             x=top_locs["Filings"],
@@ -1394,7 +1465,7 @@ with charts_placeholder.container():
             marker=dict(color=_bar_colors, line=dict(width=0)),
             text=top_locs["Filings"],
             textposition="outside",
-            textfont=dict(color="#5f5f5f", size=10, family="IBM Plex Mono, monospace"),
+            textfont=dict(color="#cbd5e1", size=11, family="IBM Plex Mono, monospace"),
             hovertemplate="<b>%{y}</b><br>%{x} filings<extra></extra>",
             cliponaxis=False,
         ))
@@ -1648,6 +1719,38 @@ with table_placeholder.container():
             )
             fig_chart.update_layout(height=320, margin_t=36)
             st.plotly_chart(fig_chart, use_container_width=True, config=_CHART_CONFIG)
+
+# ── About section ─────────────────────────────────────────────────────────────
+st.markdown("---")
+st.markdown(
+    """
+<div class="about-section">
+  <div class="section-label">About This Tool</div>
+  <div class="about-grid">
+    <div class="about-col">
+      <div class="about-h">What it does</div>
+      <p class="about-p">Insider tracks SEC Form 4 filings in real time — the disclosures that
+      corporate executives, directors, and 10% owners are required to file within two business
+      days of trading their own company's stock. It surfaces who bought or sold, how large the
+      transaction was, and what the share price did over the 7, 30, and 90 days that followed.</p>
+      <div class="about-h">How it works</div>
+      <p class="about-p">Filings are pulled live from the SEC EDGAR full-text search API and parsed
+      for transaction type, insider role, share count, and price. Tickers, sectors, and forward
+      returns are enriched through Yahoo Finance, then cached and rendered in Streamlit — no
+      database and no paid data feed. The full result set is available as a CSV download above.</p>
+    </div>
+    <div class="about-col about-side">
+      <div class="about-h">Built by</div>
+      <p class="about-name">Jayal Neema</p>
+      <p class="about-meta">Class of 2027<br>California High School</p>
+      <a class="about-link" href="https://github.com/jayalqqq/insider-moniter" target="_blank" rel="noopener">View source on GitHub &#8599;</a>
+      <p class="about-disclaimer">For research and educational use only. Not investment advice.</p>
+    </div>
+  </div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
 
 # ── Hover sparkline tooltip JS (fixed: delayed hide + pointer-events + above row) ──
 components.html("""
