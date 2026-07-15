@@ -167,9 +167,6 @@ div[data-baseweb="tag"] {
 }
 .kpi-card:hover           { background: #080808; }
 .kpi-card:hover::before   { transform: scaleX(1); }
-.kpi-card.kpi-mark-buy::before     { background: var(--buy-solid); }
-.kpi-card.kpi-mark-sell::before    { background: var(--sell-solid); }
-.kpi-card.kpi-mark-cluster::before { background: #f59e0b; }
 
 .kpi-label {
     font-family: var(--font-mono);
@@ -1522,17 +1519,17 @@ _kpi_html = f"""
     <div class="kpi-value" data-target="{companies}" data-type="int">{companies:,}</div>
     <div class="kpi-desc">Distinct issuers</div>
   </div>
-  <div class="kpi-card kpi-mark-sell">
+  <div class="kpi-card">
     <div class="kpi-label">Buy / Sell Ratio</div>
     <div class="kpi-value" data-target="{_ratio_num or 0}" data-final="{_html.escape(_ratio_display)}" data-type="ratio">{_ratio_display}</div>
     <div class="kpi-desc">{buys} buys / {sells} sells</div>
   </div>
-  <div class="kpi-card kpi-mark-buy">
+  <div class="kpi-card">
     <div class="kpi-label">Notable Buys</div>
     <div class="kpi-value" data-target="{notable_buys}" data-type="int">{notable_buys:,}</div>
     <div class="kpi-desc">CEO / CFO / President buying</div>
   </div>
-  <div class="kpi-card kpi-mark-cluster">
+  <div class="kpi-card">
     <div class="kpi-label">Cluster Buys</div>
     <div class="kpi-value" data-target="{cluster_count}" data-type="int">{cluster_count:,}</div>
     <div class="kpi-desc">Coordinated insider buying</div>
