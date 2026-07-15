@@ -802,27 +802,35 @@ def _get_sparkline_prices(ticker: str, ref_date_str: str) -> list:
 
 
 # ── EDGAR filing fetch (TTL 5 min) ────────────────────────────────────────────
-# The EDGAR full-text search API returns up to 100 hits per request; paginate
-# with the `from` offset until we reach `limit`. `_status` is prefixed with an
-# underscore so st.cache_data ignores it when hashing (progress is only shown
-# on a cache miss). Results are de-duplicated by accession number.
+# The EDGAR full-text search API returns up to 100 hits per request. A single
+# page is fetched by the cached helper below (kept pure — no Streamlit calls, so
+# st.cache_data can memoize/replay it safely). The uncached fetch_filings wrapper
+# owns the pagination loop and the progress bar; calling a progress widget inside
+# a cached function raises CacheReplayClosureError, which is why they're split.
 @st.cache_data(ttl=300, show_spinner=False)
-def fetch_filings(start_dt: str, end_dt: str, limit: int = MAX_RESULTS, _status=None) -> pd.DataFrame:
-    hits, seen, page, per_page = [], set(), 0, 100
+def _fetch_page(start_dt: str, end_dt: str, page: int) -> list:
+    params = {
+        "q": '"form 4"', "forms": "4", "dateRange": "custom",
+        "startdt": start_dt, "enddt": end_dt, "from": page * 100,
+    }
+    try:
+        resp = _session.get(BASE_URL, params=params, timeout=15)
+        resp.raise_for_status()
+        return resp.json().get("hits", {}).get("hits", [])
+    except Exception:
+        return None  # signals a fetch error to the caller
+
+
+def fetch_filings(start_dt: str, end_dt: str, limit: int = MAX_RESULTS, status=None) -> pd.DataFrame:
+    hits, seen, per_page = [], set(), 100
     # EDGAR caps the `from` offset at 10,000 (100 pages of 100)
-    while len(hits) < limit and page < 100:
-        params = {
-            "q": '"form 4"', "forms": "4", "dateRange": "custom",
-            "startdt": start_dt, "enddt": end_dt, "from": page * per_page,
-        }
-        try:
-            resp = _session.get(BASE_URL, params=params, timeout=15)
-            resp.raise_for_status()
-            data = resp.json()
-        except Exception as e:
-            st.error(f"EDGAR API error: {e}")
+    for page in range(100):
+        if len(hits) >= limit:
             break
-        batch = data.get("hits", {}).get("hits", [])
+        batch = _fetch_page(start_dt, end_dt, page)
+        if batch is None:
+            st.error("EDGAR API error — showing whatever loaded so far.")
+            break
         if not batch:
             break
         for h in batch:
@@ -831,10 +839,9 @@ def fetch_filings(start_dt: str, end_dt: str, limit: int = MAX_RESULTS, _status=
                 continue
             seen.add(adsh)
             hits.append(h)
-        page += 1
-        if _status is not None:
+        if status is not None:
             loaded = min(len(hits), limit)
-            _status.progress(min(loaded / limit, 1.0), text=f"Loading filings… {loaded}/{limit}")
+            status.progress(min(loaded / limit, 1.0), text=f"Loading filings… {loaded}/{limit}")
         if len(batch) < per_page:
             break
     return _parse_hits(hits[:limit])
@@ -1054,7 +1061,7 @@ with st.sidebar:
             value=date(2025, 1, 1),
             max_value=date.today(),
             key="start_date",
-            on_change=fetch_filings.clear,
+            on_change=_fetch_page.clear,
         )
     with col_e:
         end_date = st.date_input(
@@ -1062,7 +1069,7 @@ with st.sidebar:
             value=date.today(),
             max_value=date.today(),
             key="end_date",
-            on_change=fetch_filings.clear,
+            on_change=_fetch_page.clear,
         )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     filing_limit = st.radio(
@@ -1071,7 +1078,7 @@ with st.sidebar:
         index=0,
         horizontal=True,
         key="filing_limit",
-        on_change=fetch_filings.clear,
+        on_change=_fetch_page.clear,
     )
     st.markdown(_GRAD_DIV, unsafe_allow_html=True)
     refresh = st.button("Refresh Data", use_container_width=True)
@@ -1128,7 +1135,7 @@ table_placeholder.markdown(_SKEL_TABLE,   unsafe_allow_html=True)
 
 # ── Fetch & enrich ────────────────────────────────────────────────────────────
 _fetch_prog = st.progress(0.0, text=f"Loading filings… 0/{filing_limit}")
-df = fetch_filings(str(start_date), str(end_date), filing_limit, _status=_fetch_prog)
+df = fetch_filings(str(start_date), str(end_date), filing_limit, status=_fetch_prog)
 _fetch_prog.empty()
 
 if df.empty:
