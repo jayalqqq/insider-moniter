@@ -2166,7 +2166,9 @@ else:
         **_BASE_LAYOUT,
         barmode="group", bargap=0.4, bargroupgap=0.12,
         xaxis=dict(**_AXIS_BASE, showgrid=False),
-        yaxis=dict(**_AXIS_BASE, showgrid=True, ticksuffix="%", zeroline=True, zerolinecolor="#2c2c2c"),
+        # dict-merge form ({**a, ...}) so we can OVERRIDE zeroline from _AXIS_BASE
+        # (dict(**_AXIS_BASE, zeroline=True) raises "multiple values for zeroline").
+        yaxis={**_AXIS_BASE, "showgrid": True, "ticksuffix": "%", "zeroline": True, "zerolinecolor": "#2c2c2c"},
         legend=dict(orientation="h", x=0, y=1.14, xanchor="left", yanchor="bottom",
                     bgcolor=_TRANSPARENT,
                     font=dict(color="#8a8a8a", size=10, family="IBM Plex Mono, monospace")),
