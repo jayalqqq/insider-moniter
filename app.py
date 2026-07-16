@@ -1,10 +1,12 @@
 import html as _html
 import json
 import pathlib
+import random
 import re as _re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import pandas as pd
@@ -871,14 +873,49 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
 
 
 # ── yfinance helpers ──────────────────────────────────────────────────────────
-def _history_with_fallback(ticker: str, start: str, end: str):
+def _yahoo_chart(ticker: str, start: str, end: str) -> pd.DataFrame:
+    """Daily closes from Yahoo's chart API via the shared SEC-style session.
+
+    We deliberately do NOT use yfinance here: yfinance sends a browser-like
+    User-Agent that Yahoo rate-limits to HTTP 429 (empty history -> blank
+    returns), whereas the app's session UA returns HTTP 200 with full data.
+    Returns a DataFrame with a tz-aware "Date" index and a "Close" column,
+    matching the shape the callers expect.
+    """
     try:
-        hist = yf.Ticker(ticker).history(start=start, end=end, timeout=10)
-        if hist.empty and "." in ticker:
-            hist = yf.Ticker(ticker.split(".")[0]).history(start=start, end=end, timeout=10)
-        return hist
+        p1 = int(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+        p2 = int(datetime.strptime(end,   "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400
+        time.sleep(random.uniform(0.03, 0.09))  # gentle pacing to avoid rate limits
+        resp = _session.get(
+            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
+            params={"period1": p1, "period2": p2, "interval": "1d"}, timeout=10,
+        )
+        if resp.status_code != 200:
+            return pd.DataFrame()
+        result = resp.json().get("chart", {}).get("result")
+        if not result:
+            return pd.DataFrame()
+        ts     = result[0].get("timestamp") or []
+        closes = (result[0].get("indicators", {}).get("quote", [{}])[0].get("close")) or []
+        pairs  = [(t, c) for t, c in zip(ts, closes) if c is not None]
+        if not pairs:
+            return pd.DataFrame()
+        out = pd.DataFrame(
+            {"Close": [c for _, c in pairs]},
+            index=pd.to_datetime([t for t, _ in pairs], unit="s", utc=True),
+        )
+        out.index.name = "Date"
+        return out
     except Exception:
         return pd.DataFrame()
+
+
+def _history_with_fallback(ticker: str, start: str, end: str):
+    # Retry foreign/suffixed tickers (e.g. "AGN.MX", "SHOP.TO") with the base symbol.
+    hist = _yahoo_chart(ticker, start, end)
+    if hist.empty and "." in ticker:
+        hist = _yahoo_chart(ticker.split(".")[0], start, end)
+    return hist
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1106,21 +1143,24 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
 
     df["7d Return"] = df["30d Return"] = df["90d Return"] = None
 
-    buy_mask = (df["Transaction Type"] == "🟢 Buy") & df["Ticker"].astype(bool)
-    buy_rows = df[buy_mask]
+    # Compute post-transaction returns for EVERY ticker'd filing (not just buys):
+    # ~90% of Form 4s are sells/awards, and their price data is just as available,
+    # so restricting to buys is why most rows showed "—". Returns are only left
+    # blank when the window hasn't elapsed yet or the ticker has no price data.
+    ret_rows = df[df["Ticker"].astype(bool)]
 
-    if not buy_rows.empty:
+    if not ret_rows.empty:
         pairs = list(dict.fromkeys(
             (row["Ticker"], row["Transaction Date"] or str(row["Filed"].date()))
-            for _, row in buy_rows.iterrows() if row["Ticker"]
+            for _, row in ret_rows.iterrows() if row["Ticker"]
         ))
         ret_results: dict[tuple, tuple] = {}
-        with ThreadPoolExecutor(max_workers=10) as ex:
+        with ThreadPoolExecutor(max_workers=6) as ex:  # modest concurrency = fewer 429s
             fmap2 = {ex.submit(_get_returns, t, d): (t, d) for t, d in pairs}
             for fut in as_completed(fmap2):
                 ret_results[fmap2[fut]] = fut.result()
 
-        for idx, row in buy_rows.iterrows():
+        for idx, row in ret_rows.iterrows():
             key = (row["Ticker"], row["Transaction Date"] or str(row["Filed"].date()))
             r7, r30, r90 = ret_results.get(key, (None, None, None))
             df.at[idx, "7d Return"]  = r7
