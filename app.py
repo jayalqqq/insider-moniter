@@ -523,6 +523,7 @@ h2 { color: #e0e0e0 !important; font-family: var(--font-mono) !important;
     font-size: 14px; line-height: 1.7; color: var(--fog);
     margin: 0 0 28px 0; max-width: 640px;
 }
+.about-p em { font-style: italic; color: #dde6f0; }
 .about-col.about-side { border-left: 1px solid var(--line); padding-left: 40px; }
 .about-name {
     font-family: var(--font-display);
@@ -676,6 +677,92 @@ div[class*="st-key-preset_"] button[data-testid*="rimary"] {
     font-family: var(--font-mono); font-size: 11px; color: var(--dim);
     text-transform: uppercase; letter-spacing: 0.08em;
     padding: 24px 16px; border: 1px solid var(--line);
+}
+
+/* ── Research Findings panel ── */
+.research-panel { border: 1px solid var(--line); padding: 32px; margin-bottom: 52px; }
+.stat-grid {
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 1px; background: var(--line); border: 1px solid var(--line); margin-bottom: 24px;
+}
+.stat-card { background: #000; padding: 22px 20px; }
+.stat-label {
+    font-family: var(--font-mono); color: var(--ash);
+    font-size: 9.5px; font-weight: 500; letter-spacing: 0.12em;
+    text-transform: uppercase; margin-bottom: 14px;
+}
+.stat-value {
+    font-family: var(--font-display); font-size: 2rem; font-weight: 500;
+    line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    color: #fff;
+}
+.stat-value.pos { color: #4ade80; }
+.stat-value.neg { color: #f87171; }
+.stat-sub {
+    font-family: var(--font-mono); color: var(--dim);
+    font-size: 9px; margin-top: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+}
+.research-takeaway {
+    font-family: var(--font-body); font-size: 15px; line-height: 1.6;
+    color: #dde6f0; border-left: 2px solid #4ade80; padding: 4px 0 4px 18px;
+    margin: 4px 0 8px;
+}
+.research-takeaway.neg { border-left-color: #f87171; }
+.research-empty {
+    font-family: var(--font-mono); font-size: 11px; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 0;
+}
+
+/* ── Empty state ── */
+.empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 90px 24px; border: 1px solid var(--line); margin: 24px 0;
+}
+.empty-icon {
+    font-family: var(--font-display); font-size: 44px; color: #2c2c2c;
+    line-height: 1; margin-bottom: 22px;
+}
+.empty-title {
+    font-family: var(--font-display); font-size: 24px; font-weight: 600; color: #fff;
+    letter-spacing: -0.01em; margin-bottom: 12px;
+}
+.empty-sub {
+    font-family: var(--font-body); font-size: 14px; color: var(--fog);
+    max-width: 420px; line-height: 1.6; margin-bottom: 28px;
+}
+.empty-btn {
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: #e8e8e8; text-decoration: none;
+    border: 1px solid var(--line-2); padding: 12px 22px;
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.empty-btn:hover { background: #fff; color: #000; border-color: #fff; }
+
+/* ── Mobile (≤768px) ── */
+@media (max-width: 768px) {
+    .main .block-container { padding: 84px 16px 72px !important; }
+    /* KPI + stat + research grids collapse */
+    .kpi-grid  { grid-template-columns: repeat(2, 1fr); }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    /* Streamlit column rows stack vertically */
+    [data-testid="stHorizontalBlock"] { flex-direction: column !important; gap: 20px !important; }
+    [data-testid="stColumn"] { width: 100% !important; flex: 1 1 100% !important; min-width: 0 !important; }
+    /* hero scales down */
+    .hero-section { margin-bottom: 36px; }
+    .hero-foot { flex-direction: column; align-items: flex-start; gap: 16px; }
+    .hero-sub { font-size: 14px; }
+    .research-panel { padding: 20px 16px; }
+    .about-grid { gap: 28px; }
+    .empty-state { padding: 60px 16px; }
+    .empty-title { font-size: 20px; }
+    /* nav tightens */
+    #top-navbar { padding: 0 16px; }
+    #top-navbar .nav-right { gap: 14px; }
+}
+@media (max-width: 480px) {
+    .kpi-grid  { grid-template-columns: 1fr; }
+    .stat-grid { grid-template-columns: 1fr; }
+    .hero-headline { line-height: 0.94; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -940,6 +1027,14 @@ def _get_returns(ticker: str, base_date_str: str) -> tuple:
         return _ret(7), _ret(30), _ret(90)
     except Exception:
         return None, None, None
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def _get_spy_returns(base_date_str: str) -> tuple:
+    """S&P 500 (SPY) 7/30/90-day return from a given date — the market benchmark.
+    Cached 6h and keyed only on the date, so it's fetched once per distinct
+    transaction date and reused across every insider buy on that day."""
+    return _get_returns("SPY", base_date_str)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -1361,6 +1456,17 @@ def _star_href(new_wl):
     return "?" + urlencode(params)
 
 
+def _clear_filters_href():
+    """Reset every narrowing filter (type/ticker/company/location/search/watchlist)
+    while keeping the data window (dates + limit). Reloading with only sd/ed/lim
+    drops the URL-backed filters and resets the keyless sidebar widgets."""
+    return "?" + urlencode({
+        "sd":  str(st.session_state["start_date"]),
+        "ed":  str(st.session_state["end_date"]),
+        "lim": str(st.session_state.get("filing_limit", 200)),
+    })
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── Sidebar part 1 ────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1493,7 +1599,15 @@ if df.empty:
     kpi_placeholder.empty()
     charts_placeholder.empty()
     table_placeholder.empty()
-    st.warning("No filings found for the selected date range.")
+    st.markdown(
+        "<div class='empty-state'>"
+        "<div class='empty-icon'>&#10022;</div>"
+        "<div class='empty-title'>No filings found</div>"
+        "<div class='empty-sub'>No SEC Form 4 filings were found for this date range. "
+        "Try widening the dates in the sidebar.</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 _enrich_prog = st.progress(0, text="Checking filing cache…")
@@ -1588,6 +1702,24 @@ if st.session_state.get("watchlist_only") and watchlist:
     filtered = filtered[filtered["Ticker"].isin(watchlist)]
 
 filtered = filtered.copy()
+
+# ── Empty state: filters matched nothing (df has data, but this view is empty) ─
+if filtered.empty:
+    kpi_placeholder.empty()
+    charts_placeholder.empty()
+    table_placeholder.empty()
+    st.markdown(
+        "<div class='empty-state'>"
+        "<div class='empty-icon'>&#10022;</div>"
+        "<div class='empty-title'>No filings match your filters</div>"
+        "<div class='empty-sub'>Nothing matched your current search, transaction type, ticker, "
+        "company, location, or watchlist. Try loosening one of them.</div>"
+        f"<a class='empty-btn' href='{_clear_filters_href()}' target='_self'>Clear all filters</a>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
 filtered["Notable"] = (
     (filtered["Transaction Type"] == "🟢 Buy") &
     filtered["Exec Title"].apply(lambda t: bool(NOTABLE_RE.search(str(t))))
@@ -1921,6 +2053,129 @@ with charts_placeholder.container():
 
     st.markdown("---")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# ── Research Findings — do insider buys beat the market? ──────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown(
+    "<div class='section-label'>Research Findings — Do Insider Buys Beat the Market?</div>",
+    unsafe_allow_html=True,
+)
+
+_rf_buys = filtered[filtered["Transaction Type"] == "🟢 Buy"].copy()
+for _c in ("7d Return", "30d Return", "90d Return"):
+    _rf_buys[_c] = pd.to_numeric(_rf_buys[_c], errors="coerce")
+
+# S&P 500 benchmark over the same transaction dates (cached per date)
+_rf_dates = sorted({(r["Transaction Date"] or str(r["Filed"].date())) for _, r in _rf_buys.iterrows()})
+_spy_map: dict = {}
+if _rf_dates:
+    with st.spinner("Benchmarking insider buys against the S&P 500…"):
+        with ThreadPoolExecutor(max_workers=6) as _sx:
+            _sfm = {_sx.submit(_get_spy_returns, d): d for d in _rf_dates}
+            for _sf in as_completed(_sfm):
+                _spy_map[_sfm[_sf]] = _sf.result()
+
+# Paired averages over the SAME buys (insider vs S&P 500) for each horizon
+_HZ = [("7d", "7d Return", 0), ("30d", "30d Return", 1), ("90d", "90d Return", 2)]
+avg_ins: dict = {}
+avg_spy: dict = {}
+n_hz: dict = {}
+for _h, _col, _i in _HZ:
+    _ins, _spy = [], []
+    for _, r in _rf_buys.iterrows():
+        iv = r[_col]
+        if pd.notna(iv):
+            _ins.append(float(iv))
+            sv = _spy_map.get(r["Transaction Date"] or str(r["Filed"].date()), (None, None, None))[_i]
+            if sv is not None:
+                _spy.append(float(sv))
+    avg_ins[_h] = (sum(_ins) / len(_ins)) if _ins else None
+    avg_spy[_h] = (sum(_spy) / len(_spy)) if _spy else None
+    n_hz[_h] = len(_ins)
+
+_r30 = _rf_buys["30d Return"].dropna()
+hit_rate = (100.0 * (_r30 > 0).mean()) if len(_r30) else None
+N = int(len(_r30))
+
+if N == 0 and not any(v is not None for v in avg_ins.values()):
+    st.markdown(
+        "<div class='research-empty'>Not enough insider buys with elapsed return windows in "
+        "the current view to compute findings. Widen the date range or clear filters.</div>",
+        unsafe_allow_html=True,
+    )
+else:
+    def _sv(v):
+        if v is None:
+            return "<div class='stat-value'>—</div>"
+        return f"<div class='stat-value {'pos' if v >= 0 else 'neg'}'>{'+' if v >= 0 else ''}{v:.1f}%</div>"
+
+    def _spy_sub(h):
+        return f"S&amp;P {avg_spy[h]:+.1f}%" if avg_spy[h] is not None else "S&amp;P —"
+
+    _stat_html = (
+        "<div class='stat-grid'>"
+        f"<div class='stat-card'><div class='stat-label'>Avg 7-Day Return</div>{_sv(avg_ins['7d'])}"
+        f"<div class='stat-sub'>{n_hz['7d']} buys · {_spy_sub('7d')}</div></div>"
+        f"<div class='stat-card'><div class='stat-label'>Avg 30-Day Return</div>{_sv(avg_ins['30d'])}"
+        f"<div class='stat-sub'>{n_hz['30d']} buys · {_spy_sub('30d')}</div></div>"
+        f"<div class='stat-card'><div class='stat-label'>Avg 90-Day Return</div>{_sv(avg_ins['90d'])}"
+        f"<div class='stat-sub'>{n_hz['90d']} buys · {_spy_sub('90d')}</div></div>"
+        f"<div class='stat-card'><div class='stat-label'>30-Day Hit Rate</div>"
+        f"<div class='stat-value'>{('%.0f%%' % hit_rate) if hit_rate is not None else '—'}</div>"
+        f"<div class='stat-sub'>buys positive after 30d</div></div>"
+        f"<div class='stat-card'><div class='stat-label'>Sample Size</div>"
+        f"<div class='stat-value'>{N:,}</div><div class='stat-sub'>buys with 30d data</div></div>"
+        "</div>"
+    )
+    st.markdown(_stat_html, unsafe_allow_html=True)
+
+    # Dynamic plain-English takeaway
+    if avg_ins["30d"] is not None and N > 0:
+        _verb = "rose" if avg_ins["30d"] >= 0 else "fell"
+        _tk = (f"On average, stocks {_verb} {abs(avg_ins['30d']):.1f}% in the 30 days after an "
+               f"insider purchase (based on {N:,} buys).")
+        if avg_spy["30d"] is not None:
+            _diff = avg_ins["30d"] - avg_spy["30d"]
+            _rel = "ahead of" if _diff >= 0 else "behind"
+            _tk += (f" That is {abs(_diff):.1f} points {_rel} the S&amp;P 500's "
+                    f"{avg_spy['30d']:+.1f}% over the same window.")
+        _tk_cls = "" if avg_ins["30d"] >= 0 else " neg"
+        st.markdown(f"<div class='research-takeaway{_tk_cls}'>{_tk}</div>", unsafe_allow_html=True)
+
+    # Insider Buys vs S&P 500 — grouped bar chart
+    st.markdown(
+        "<div style='font-family:var(--font-mono);font-size:9.5px;color:#3a3a3a;"
+        "text-transform:uppercase;letter-spacing:0.1em;margin:20px 0 8px;'>"
+        "Insider Buys vs S&amp;P 500 · average return by horizon</div>",
+        unsafe_allow_html=True,
+    )
+    _bm = go.Figure()
+    _bm.add_trace(go.Bar(
+        name="Insider Buys", x=["7D", "30D", "90D"],
+        y=[avg_ins["7d"], avg_ins["30d"], avg_ins["90d"]],
+        marker=dict(color="#e8e8e8"),
+        hovertemplate="Insider %{x}: %{y:.2f}%<extra></extra>",
+    ))
+    _bm.add_trace(go.Bar(
+        name="S&P 500", x=["7D", "30D", "90D"],
+        y=[avg_spy["7d"], avg_spy["30d"], avg_spy["90d"]],
+        marker=dict(color="#43506b"),
+        hovertemplate="S&P 500 %{x}: %{y:.2f}%<extra></extra>",
+    ))
+    _bm.update_layout(
+        **_BASE_LAYOUT,
+        barmode="group", bargap=0.4, bargroupgap=0.12,
+        xaxis=dict(**_AXIS_BASE, showgrid=False),
+        yaxis=dict(**_AXIS_BASE, showgrid=True, ticksuffix="%", zeroline=True, zerolinecolor="#2c2c2c"),
+        legend=dict(orientation="h", x=0, y=1.14, xanchor="left", yanchor="bottom",
+                    bgcolor=_TRANSPARENT,
+                    font=dict(color="#8a8a8a", size=10, family="IBM Plex Mono, monospace")),
+    )
+    _bm.update_layout(height=300)
+    st.plotly_chart(_bm, use_container_width=True, config=_CHART_CONFIG)
+
+st.markdown("---")
+
 # ── Build table HTML ──────────────────────────────────────────────────────────
 rows_html = ""
 for _, row in display.iterrows():
@@ -1981,9 +2236,9 @@ for _, row in display.iterrows():
     )
 
 table_html = f"""
-<div style="overflow-x:hidden; max-height:560px; overflow-y:auto;
+<div style="overflow-x:auto; max-height:560px; overflow-y:auto;
             border:1px solid #1a1a1a; border-radius:0; width:100%;">
-  <table class="filing-table">
+  <table class="filing-table" style="min-width:1080px;">
     <colgroup>
       <col class="col-date">  <col class="col-txn">   <col class="col-exec">
       <col class="col-title"> <col class="col-co">    <col class="col-sector">
@@ -2064,25 +2319,8 @@ with table_placeholder.container():
         unsafe_allow_html=True,
     )
 
-    # ── Returns summary ───────────────────────────────────────────────────────
-    buy_rows    = filtered[filtered["Transaction Type"] == "🟢 Buy"]
-    has_returns = buy_rows[["7d Return", "30d Return", "90d Return"]].notna().any().any()
-
-    if has_returns:
-        st.markdown("---")
-        st.markdown("<div class='section-label'>Historical Performance — Buy Transactions</div>", unsafe_allow_html=True)
-
-        def _kpi_ret(label, val):
-            if val is None or (isinstance(val, float) and pd.isna(val)):
-                return f"**{label}:** —"
-            color = "#22c55e" if val >= 0 else "#ef4444"
-            sign  = "+" if val >= 0 else ""
-            return f"**{label}:** <span style='color:{color}'>{sign}{val:.2f}%</span>"
-
-        ra, rb, rc = st.columns(3)
-        ra.markdown(_kpi_ret("Avg 7-day",  buy_rows["7d Return"].mean()),  unsafe_allow_html=True)
-        rb.markdown(_kpi_ret("Avg 30-day", buy_rows["30d Return"].mean()), unsafe_allow_html=True)
-        rc.markdown(_kpi_ret("Avg 90-day", buy_rows["90d Return"].mean()), unsafe_allow_html=True)
+    # (Buy-return averages now live in the prominent "Research Findings" panel
+    #  above, benchmarked against the S&P 500.)
 
     # ── Stock Price Explorer ──────────────────────────────────────────────────
     st.markdown("---")
@@ -2240,18 +2478,19 @@ st.markdown("---")
 st.markdown(
     """
 <div class="about-section">
-  <div class="section-label">About This Tool</div>
+  <div class="section-label">About This Project</div>
   <div class="about-grid">
     <div class="about-col">
       <div class="about-h">What it does</div>
-      <p class="about-p">Insider tracks SEC Form 4 filings in real time — the disclosures that
-      corporate executives, directors, and 10% owners are required to file within two business
-      days of trading their own company's stock. It surfaces who bought or sold, how large the
-      transaction was, and what the share price did over the 7, 30, and 90 days that followed.</p>
+      <p class="about-p">Insider monitors SEC Form 4 filings — the disclosures corporate executives,
+      directors, and 10% owners must file within two business days of trading their own company's
+      stock — and analyzes the core research question: do insider <em>buys</em> actually predict
+      future returns? It measures what each stock did over the 7, 30, and 90 days after a purchase
+      and benchmarks that against the S&amp;P 500.</p>
       <div class="about-h">How it works</div>
       <p class="about-p">Filings are pulled live from the SEC EDGAR full-text search API and parsed
       for transaction type, insider role, share count, and price. Tickers, sectors, and forward
-      returns are enriched through Yahoo Finance, then cached and rendered in Streamlit — no
+      returns are enriched with Yahoo Finance data, then cached and rendered in Streamlit — no
       database and no paid data feed. The full result set is available as a CSV download above.</p>
     </div>
     <div class="about-col about-side">
