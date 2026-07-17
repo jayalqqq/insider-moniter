@@ -370,7 +370,11 @@ def main() -> int:
         else:
             have = db.tickers_with_prices(conn)
             uniq = sorted({r["ticker"] for r in rows if r["ticker"]})
-            todo = [t for t in uniq if t not in have] + [t for t in uniq if t in have]
+            # SPY is the S&P-500 benchmark the app needs; always fetch it first so
+            # it's never cut by the --max-tickers cap.
+            todo = ["SPY"] if "SPY" not in have else []
+            todo += [t for t in uniq if t not in have and t != "SPY"]
+            todo += [t for t in uniq if t in have and t != "SPY"]
             todo = todo[:args.max_tickers]
             print(f"[4/4] Fetching prices for {len(todo)} of {len(uniq)} unique tickers "
                   f"(cap --max-tickers={args.max_tickers})")

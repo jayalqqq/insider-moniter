@@ -18,6 +18,14 @@ import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
 
+import database                       # Phase 2: SQLite store (scraper-populated)
+import dbsource                       # Phase 2: read filings/prices from the DB
+
+# When the SQLite database has data we read everything from it (no live SEC/Tiingo
+# calls); this dict is populated during load. If the DB is missing/empty the app
+# falls back to live fetching, and this stays off. Reset each rerun by definition.
+_DB_MODE: dict = {"on": False, "prices": {}}
+
 # ── Page config ───────────────────────────────────────────────────────────────
 # Favicon: the INSIDER ✦ mark (white sparkle on black). Load the committed PNG
 # by an absolute path so it resolves on Streamlit Cloud; fall back to the ✦ glyph
@@ -996,9 +1004,16 @@ def _tiingo_symbol(ticker: str) -> str:
 def _fetch_ticker_history(ticker: str) -> pd.DataFrame:
     """One full daily-close history pull per ticker from Tiingo. Cached 6h on
     SUCCESS ONLY (failures / rate-limits are never cached, so they retry on a
-    later load). Returns a DataFrame with a tz-aware "Date" index + "Close"."""
+    later load). Returns a DataFrame with a tz-aware "Date" index + "Close".
+
+    In database mode, prices come from the SQLite store (preloaded into
+    _DB_MODE["prices"]) instead — no network call. Same DataFrame shape, so every
+    caller (returns, sparklines, Stock Price Explorer, SPY benchmark) is unchanged.
+    """
     if not ticker:
         return pd.DataFrame()
+    if _DB_MODE["on"]:
+        return _DB_MODE["prices"].get(ticker, pd.DataFrame())
     store = _tiingo_store()
     cache, state, lock = store["hist"], store["state"], store["lock"]
     now = time.time()
@@ -1127,7 +1142,14 @@ def _get_sparkline_prices(ticker: str, ref_date_str: str) -> list:
         return []
 
 
-# ── EDGAR filing fetch (TTL 5 min) ────────────────────────────────────────────
+# ── EDGAR filing fetch (TTL 5 min) — LIVE FALLBACK PATH ONLY ──────────────────
+# NOTE (Phase 2): the SEC fetch/parse and Tiingo helpers below are only used when
+# the SQLite database is empty/missing (fresh deploy). The same SEC/Tiingo logic
+# is duplicated in scraper.py. TODO: consolidate both into a shared, streamlit-
+# free module once the DB path is proven in production — deferred for now because
+# app.py's live path can't be fully exercised in this env, so refactoring it mid-
+# migration is risky. dbsource.py already centralises the new DB-read layer.
+#
 # The EDGAR full-text search API returns up to 100 hits per request. A single
 # page is fetched by the cached helper below (kept pure — no Streamlit calls, so
 # st.cache_data can memoize/replay it safely). The uncached fetch_filings wrapper
@@ -1666,11 +1688,50 @@ kpi_placeholder.markdown(_SKEL_KPI,      unsafe_allow_html=True)
 charts_placeholder.markdown(_SKEL_CHARTS, unsafe_allow_html=True)
 table_placeholder.markdown(_SKEL_TABLE,   unsafe_allow_html=True)
 
-# ── Fetch & enrich ────────────────────────────────────────────────────────────
-_fetch_prog = st.progress(0.0, text=f"Loading filings… 0/{filing_limit}")
-df = fetch_filings(str(start_date), str(end_date), filing_limit, status=_fetch_prog)
-_fetch_prog.empty()
+# ── Load data: SQLite database if populated, else live SEC/Tiingo fetch ───────
+# The scraper (scraper.py) populates insider.db ahead of time. When it has data
+# we read filings + prices from disk (instant, no rate limits). If the DB is
+# missing/empty (e.g. a fresh deploy before the first scrape), we fall back to
+# the original live-fetch path so the app never shows a blank page.
+_conn, _use_db = dbsource.open_db()
+_DB_MODE["on"] = _use_db
+_DB_MODE["prices"] = {}
+_data_source = "database" if _use_db else "live"
 
+if _use_db:
+    with st.spinner("Loading filings from database…"):
+        df = dbsource.load_filings(_conn, str(start_date), str(end_date), filing_limit)
+        if not df.empty:
+            # Preload each ticker's stored price history (+ SPY benchmark) into
+            # memory once; _fetch_ticker_history / returns read from this dict.
+            for _t in dbsource.unique_tickers(df):
+                _DB_MODE["prices"][_t] = dbsource.history_from_db(_conn, _t)
+            _DB_MODE["prices"].setdefault("SPY", dbsource.history_from_db(_conn, "SPY"))
+            df["7d Return"] = df["30d Return"] = df["90d Return"] = None
+            for _idx, _row in df.iterrows():
+                if _row["Ticker"]:
+                    _base = _row["Transaction Date"] or str(_row["Filed"].date())
+                    _r7, _r30, _r90 = _returns_from_history(_DB_MODE["prices"].get(_row["Ticker"]), _base)
+                    df.at[_idx, "7d Return"]  = _r7
+                    df.at[_idx, "30d Return"] = _r30
+                    df.at[_idx, "90d Return"] = _r90
+    _cache_hits = 0
+    if _conn is not None:
+        _conn.close()
+else:
+    _fetch_prog = st.progress(0.0, text=f"Loading filings… 0/{filing_limit}")
+    df = fetch_filings(str(start_date), str(end_date), filing_limit, status=_fetch_prog)
+    _fetch_prog.empty()
+    if not df.empty:
+        _enrich_prog = st.progress(0, text="Checking filing cache…")
+        df, _cache_hits = enrich_with_filing_data(df, progress_bar=_enrich_prog)
+        _enrich_prog.empty()
+        with st.spinner("Fetching market data (tickers, sectors, returns)…"):
+            df = enrich_with_market_data(df)
+    else:
+        _cache_hits = 0
+
+# Empty for the selected date range (works for both DB and live paths)
 if df.empty:
     kpi_placeholder.empty()
     charts_placeholder.empty()
@@ -1685,13 +1746,6 @@ if df.empty:
         unsafe_allow_html=True,
     )
     st.stop()
-
-_enrich_prog = st.progress(0, text="Checking filing cache…")
-df, _cache_hits = enrich_with_filing_data(df, progress_bar=_enrich_prog)
-_enrich_prog.empty()
-
-with st.spinner("Fetching market data (tickers, sectors, returns)…"):
-    df = enrich_with_market_data(df)
 
 # ── Sidebar part 2 ────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -2386,14 +2440,16 @@ with table_placeholder.container():
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown(table_html, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
-    _cache_note = (
-        f" &nbsp;/&nbsp; <span style='color:#5f5f5f;'>{_cache_hits}/{len(df)} from cache</span>"
-        if _cache_hits > 0 else ""
+    _src_note = (
+        " &nbsp;/&nbsp; <span style='color:#5f5f5f;'>source: database</span>"
+        if _data_source == "database"
+        else (f" &nbsp;/&nbsp; <span style='color:#5f5f5f;'>{_cache_hits}/{len(df)} from cache</span>"
+              if _cache_hits > 0 else "")
     )
     st.markdown(
         f"<div style='font-family:var(--font-mono);font-size:9.5px;color:#3a3a3a;"
         f"text-transform:uppercase;letter-spacing:0.08em;'>Returns from transaction date &nbsp;/&nbsp; "
-        f"Last fetched {datetime.now().strftime('%H:%M:%S')}{_cache_note}</div>",
+        f"Last loaded {datetime.now().strftime('%H:%M:%S')}{_src_note}</div>",
         unsafe_allow_html=True,
     )
 

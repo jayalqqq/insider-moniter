@@ -15,8 +15,8 @@ __pycache__/
 # Runtime cache / generated data
 filing_cache.json
 
-# Local scraped database (Phase 2) — rebuild with: python scraper.py
-insider.db
+# The scraped database IS committed so the deployed app has data to read.
+# Only the transient WAL/shared-memory sidecars are ignored.
 insider.db-wal
 insider.db-shm
 
