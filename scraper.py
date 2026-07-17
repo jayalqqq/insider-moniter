@@ -395,6 +395,9 @@ def main() -> int:
     print(f"  filings : {start_counts['filings']} -> {end_counts['filings']}")
     print(f"  prices  : {start_counts['prices']} -> {end_counts['prices']} "
           f"across {end_counts['tickers']} tickers")
+    # Merge the WAL into the main file so the committed insider.db is complete
+    # and standalone (the -wal/-shm sidecars are not committed).
+    conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
     conn.close()
     return 0
 
