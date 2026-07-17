@@ -968,14 +968,21 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
 _TIINGO_URL    = "https://api.tiingo.com/tiingo/daily"
 _HISTORY_START = "2023-01-01"           # wide fixed range -> one cacheable pull per ticker
 _HIST_TTL      = 21600                  # 6 hours
-_hist_cache: dict = {}                  # ticker -> (fetched_at, DataFrame)  (successes only)
-_hist_lock     = threading.Lock()
-_tiingo_state  = {"blocked_until": 0.0}  # cooldown after a 429 so we don't hammer
+
+
+@st.cache_resource(show_spinner=False)
+def _tiingo_store() -> dict:
+    """Process-wide, rerun-persistent store for ticker histories + rate-limit
+    state. Must be cache_resource, NOT a module global: Streamlit re-executes the
+    script (resetting globals) on every rerun, so a plain dict would re-fetch
+    every ticker each rerun and blow the 50/hr Tiingo budget -> all "—". This
+    persists across reruns/sessions so each ticker is fetched at most once/6h."""
+    return {"hist": {}, "state": {"blocked_until": 0.0}, "lock": threading.Lock()}
 
 
 def _tiingo_token() -> str:
     try:
-        return st.secrets["TIINGO_API_KEY"]
+        return str(st.secrets["TIINGO_API_KEY"]).strip()
     except Exception:
         return ""
 
@@ -992,12 +999,14 @@ def _fetch_ticker_history(ticker: str) -> pd.DataFrame:
     later load). Returns a DataFrame with a tz-aware "Date" index + "Close"."""
     if not ticker:
         return pd.DataFrame()
+    store = _tiingo_store()
+    cache, state, lock = store["hist"], store["state"], store["lock"]
     now = time.time()
-    with _hist_lock:
-        hit = _hist_cache.get(ticker)
+    with lock:
+        hit = cache.get(ticker)
         if hit and now - hit[0] < _HIST_TTL:
             return hit[1]
-        if now < _tiingo_state["blocked_until"]:
+        if now < state["blocked_until"]:
             return pd.DataFrame()          # in cooldown -> skip request, show "—"
     token = _tiingo_token()
     if not token:
@@ -1010,8 +1019,8 @@ def _fetch_ticker_history(ticker: str) -> pd.DataFrame:
             resp = _session.get(f"{_TIINGO_URL}/{sym}/prices", params=params,
                                 headers={"Content-Type": "application/json"}, timeout=15)
             if resp.status_code == 429:
-                with _hist_lock:
-                    _tiingo_state["blocked_until"] = time.time() + 300   # 5-min cooldown
+                with lock:
+                    state["blocked_until"] = time.time() + 300   # 5-min cooldown
                 time.sleep(1.5 * (attempt + 1) + random.random())        # backoff
                 continue
             if resp.status_code != 200:
@@ -1024,12 +1033,28 @@ def _fetch_ticker_history(ticker: str) -> pd.DataFrame:
                 index=pd.to_datetime([row["date"] for row in data], utc=True),
             )
             out.index.name = "Date"
-            with _hist_lock:
-                _hist_cache[ticker] = (time.time(), out)   # cache success only
+            with lock:
+                cache[ticker] = (time.time(), out)   # cache success only
             return out
         except Exception:
             time.sleep(1.0 * (attempt + 1))
     return pd.DataFrame()
+
+
+def _tiingo_diagnostic() -> dict:
+    """One-off probe (used only when returns come back empty) to reveal the real
+    cause on the deploy: is the key present? what HTTP status does Tiingo give?"""
+    token = _tiingo_token()
+    if not token:
+        return {"key": False, "status": "—", "rows": 0}
+    try:
+        r = _session.get(f"{_TIINGO_URL}/AAPL/prices",
+                         params={"startDate": str(date.today() - timedelta(days=12)), "token": token},
+                         headers={"Content-Type": "application/json"}, timeout=12)
+        return {"key": True, "status": r.status_code,
+                "rows": (len(r.json()) if r.status_code == 200 else 0)}
+    except Exception as e:
+        return {"key": True, "status": f"EXC:{type(e).__name__}", "rows": 0}
 
 
 def _returns_from_history(hist: pd.DataFrame, base_date_str: str) -> tuple:
@@ -1301,6 +1326,17 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
         df.at[idx, "7d Return"]  = r7
         df.at[idx, "30d Return"] = r30
         df.at[idx, "90d Return"] = r90
+
+    # TEMP DIAGNOSTIC: if nothing populated, surface the real cause on the deploy.
+    _got = df[["7d Return", "30d Return", "90d Return"]].notna().any(axis=1).sum()
+    if _got == 0:
+        _d = _tiingo_diagnostic()
+        st.warning(
+            f"Returns diagnostic — API key present: **{_d['key']}** · "
+            f"Tiingo AAPL test: **HTTP {_d['status']}**, **{_d['rows']} rows**.  "
+            f"(401 = wrong key · 429 = hourly rate limit · 200 with rows = code bug.)",
+            icon="⚠️",
+        )
 
     return df
 
