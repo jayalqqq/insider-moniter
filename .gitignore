@@ -15,6 +15,11 @@ __pycache__/
 # Runtime cache / generated data
 filing_cache.json
 
+# Local scraped database (Phase 2) — rebuild with: python scraper.py
+insider.db
+insider.db-wal
+insider.db-shm
+
 # Secrets (API keys) — never commit
 .streamlit/secrets.toml
 
