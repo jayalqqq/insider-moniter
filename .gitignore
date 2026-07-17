@@ -20,6 +20,9 @@ insider.db
 insider.db-wal
 insider.db-shm
 
+# Cached SEC reference data (re-downloaded on demand)
+.cache/
+
 # Secrets (API keys) — never commit
 .streamlit/secrets.toml
 

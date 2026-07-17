@@ -22,6 +22,7 @@ Tiingo key is read from the TIINGO_API_KEY env var, falling back to
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import re
@@ -43,6 +44,14 @@ YAHOO_SEARCH = "https://query2.finance.yahoo.com/v1/finance/search"
 TIINGO_URL   = "https://api.tiingo.com/tiingo/daily"
 PRICE_START  = "2023-01-01"          # wide window -> one pull per ticker
 EDGAR_PAGE   = 100                   # EDGAR full-text search returns 100 hits/page
+
+# SEC's official CIK -> ticker mapping (authoritative, free). Cached to disk and
+# refreshed weekly. This is the primary way we resolve tickers now; Yahoo name
+# search (imprecise: returns Frankfurt ".F" listings and warrant classes) is only
+# a fallback for the rare issuer whose CIK isn't in this file.
+CIK_MAP_URL   = "https://www.sec.gov/files/company_tickers.json"
+CIK_MAP_CACHE = Path(__file__).parent / ".cache" / "company_tickers.json"
+CIK_MAP_TTL   = 7 * 86400            # refresh weekly
 
 TXN_LABELS = {"P": "Buy", "S": "Sell", "A": "Award"}
 
@@ -73,6 +82,59 @@ def tiingo_token() -> str:
                 return str(tomllib.load(fh).get("TIINGO_API_KEY", "")).strip()
         except Exception:
             pass
+    return ""
+
+
+def load_sec_ticker_map() -> dict[int, str]:
+    """SEC's official CIK->ticker map as {int_cik: TICKER}. Cached weekly on disk.
+
+    The file looks like {"0": {"cik_str": 320193, "ticker": "AAPL", ...}, ...}.
+    Keyed by integer CIK (leading zeros dropped) so it matches the CIKs on filings.
+    """
+    raw = None
+    try:
+        if (CIK_MAP_CACHE.exists()
+                and time.time() - CIK_MAP_CACHE.stat().st_mtime < CIK_MAP_TTL):
+            raw = json.loads(CIK_MAP_CACHE.read_text())
+    except Exception:
+        raw = None
+    if raw is None:
+        try:
+            resp = session.get(CIK_MAP_URL, timeout=30)
+            resp.raise_for_status()
+            raw = resp.json()
+            CIK_MAP_CACHE.parent.mkdir(exist_ok=True)
+            CIK_MAP_CACHE.write_text(json.dumps(raw))
+        except Exception as exc:
+            print(f"  ! could not load SEC CIK->ticker map: {exc}")
+            return {}
+    # A CIK can list several tickers (common + warrants/preferreds/units). SEC
+    # orders them with the primary common stock FIRST, so keep the first one seen
+    # per CIK — otherwise we'd grab e.g. the "KDKRW" warrant instead of "KDK".
+    out: dict[int, str] = {}
+    for entry in raw.values():
+        try:
+            cik = int(entry["cik_str"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if cik not in out:
+            out[cik] = str(entry["ticker"]).upper()
+    return out
+
+
+def _norm_cik(cik) -> int | None:
+    try:
+        return int(str(cik).strip())      # int() handles zero-padded CIKs
+    except (ValueError, TypeError):
+        return None
+
+
+def resolve_cik_ticker(all_ciks, cik_map: dict[int, str]) -> str:
+    """First of a filing's CIKs that maps to a ticker (issuer CIK, order-agnostic)."""
+    for cik in all_ciks or []:
+        ticker = cik_map.get(_norm_cik(cik))
+        if ticker:
+            return ticker
     return ""
 
 
@@ -134,6 +196,7 @@ def parse_hit(hit: dict) -> dict:
         "executive":    _strip_cik(names[0]) if len(names) > 0 else None,
         "company":      _strip_cik(names[1]) if len(names) > 1 else None,
         "cik":          cik,
+        "_all_ciks":    ciks,   # transient (not stored) — used for CIK->ticker lookup
         "location":     locs[0] if locs else (", ".join(src.get("biz_states", [])) or None),
         "filing_url":   _filing_url(adsh, cik) if adsh and cik else None,
     }
@@ -261,23 +324,38 @@ def main() -> int:
                 print(f"      {done}/{len(futures)} details fetched", flush=True)
     print()
 
-    # 3. Ticker + sector per unique company
+    # 3. Ticker via SEC's authoritative CIK->ticker map (exact, no guessing).
+    #    Yahoo name search is used only for the sector, and as a ticker fallback
+    #    when an issuer's CIK isn't in the SEC file.
+    cik_map = load_sec_ticker_map()
     companies = sorted({r["company"] for r in rows if r.get("company")})
-    print(f"[3/4] Resolving ticker + sector for {len(companies)} unique companies")
-    tmap: dict[str, tuple[str, str]] = {}
+    print(f"[3/4] Resolving tickers via SEC CIK map ({len(cik_map)} entries) "
+          f"+ sector for {len(companies)} companies")
+    name_results: dict[str, tuple[str, str]] = {}
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(lookup_ticker_sector, c): c for c in companies}
         for fut in as_completed(futures):
-            tmap[futures[fut]] = fut.result()
+            name_results[futures[fut]] = fut.result()
+
+    cik_hits = name_fallbacks = 0
     for r in rows:
-        ticker, sector = tmap.get(r.get("company"), ("", "Unknown"))
-        r["ticker"], r["sector"] = ticker, sector
+        cik_ticker = resolve_cik_ticker(r.get("_all_ciks"), cik_map)
+        name_ticker, sector = name_results.get(r.get("company"), ("", "Unknown"))
+        if cik_ticker:
+            r["ticker"] = cik_ticker
+            cik_hits += 1
+        else:
+            r["ticker"] = name_ticker          # fallback: name search
+            if name_ticker:
+                name_fallbacks += 1
+        r["sector"] = sector
         if r.get("shares") is not None and r.get("price_per_share") is not None:
             r["est_value"] = round(r["shares"] * r["price_per_share"], 2)
         else:
             r["est_value"] = None
     resolved = sum(1 for r in rows if r["ticker"])
-    print(f"      resolved {resolved}/{len(rows)} filings to a ticker\n")
+    print(f"      resolved {resolved}/{len(rows)} filings to a ticker "
+          f"({cik_hits} via SEC CIK map, {name_fallbacks} via name-search fallback)\n")
 
     inserted, updated = db.upsert_filings(conn, rows)
     print(f"      -> filings: {inserted} new, {updated} updated\n")
