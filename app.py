@@ -959,61 +959,91 @@ def _lookup_ticker_and_sector(company_name: str) -> tuple[str, str]:
     return "", "Unknown"
 
 
-# ── yfinance helpers ──────────────────────────────────────────────────────────
-def _yahoo_chart(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Daily closes from Yahoo's chart API via the shared SEC-style session.
+# ── Tiingo price history (free tier: 50 req/hr, 1000/day) ─────────────────────
+# To stay under the limits we fetch each UNIQUE ticker's full daily-close history
+# exactly ONCE (manual success-only cache, 6h TTL) and compute every filing's
+# 7/30/90-day return locally from that single pull. We NEVER make per-(ticker,
+# date) network calls. Yahoo is avoided entirely: its chart API 429s from cloud
+# IPs (which is why returns were blank on the deploy); Tiingo works from cloud.
+_TIINGO_URL    = "https://api.tiingo.com/tiingo/daily"
+_HISTORY_START = "2023-01-01"           # wide fixed range -> one cacheable pull per ticker
+_HIST_TTL      = 21600                  # 6 hours
+_hist_cache: dict = {}                  # ticker -> (fetched_at, DataFrame)  (successes only)
+_hist_lock     = threading.Lock()
+_tiingo_state  = {"blocked_until": 0.0}  # cooldown after a 429 so we don't hammer
 
-    We deliberately do NOT use yfinance here: yfinance sends a browser-like
-    User-Agent that Yahoo rate-limits to HTTP 429 (empty history -> blank
-    returns), whereas the app's session UA returns HTTP 200 with full data.
-    Returns a DataFrame with a tz-aware "Date" index and a "Close" column,
-    matching the shape the callers expect.
-    """
+
+def _tiingo_token() -> str:
     try:
-        p1 = int(datetime.strptime(start, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
-        p2 = int(datetime.strptime(end,   "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()) + 86400
-        time.sleep(random.uniform(0.03, 0.09))  # gentle pacing to avoid rate limits
-        resp = _session.get(
-            f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}",
-            params={"period1": p1, "period2": p2, "interval": "1d"}, timeout=10,
-        )
-        if resp.status_code != 200:
-            return pd.DataFrame()
-        result = resp.json().get("chart", {}).get("result")
-        if not result:
-            return pd.DataFrame()
-        ts     = result[0].get("timestamp") or []
-        closes = (result[0].get("indicators", {}).get("quote", [{}])[0].get("close")) or []
-        pairs  = [(t, c) for t, c in zip(ts, closes) if c is not None]
-        if not pairs:
-            return pd.DataFrame()
-        out = pd.DataFrame(
-            {"Close": [c for _, c in pairs]},
-            index=pd.to_datetime([t for t, _ in pairs], unit="s", utc=True),
-        )
-        out.index.name = "Date"
-        return out
+        return st.secrets["TIINGO_API_KEY"]
     except Exception:
+        return ""
+
+
+def _tiingo_symbol(ticker: str) -> str:
+    # Tiingo uses plain US symbols (no ".US"); drop foreign exchange suffixes like
+    # ".MX"/".TO". US class shares use a hyphen (e.g. BRK-B) and are unaffected.
+    return ticker.split(".")[0].strip().upper()
+
+
+def _fetch_ticker_history(ticker: str) -> pd.DataFrame:
+    """One full daily-close history pull per ticker from Tiingo. Cached 6h on
+    SUCCESS ONLY (failures / rate-limits are never cached, so they retry on a
+    later load). Returns a DataFrame with a tz-aware "Date" index + "Close"."""
+    if not ticker:
         return pd.DataFrame()
+    now = time.time()
+    with _hist_lock:
+        hit = _hist_cache.get(ticker)
+        if hit and now - hit[0] < _HIST_TTL:
+            return hit[1]
+        if now < _tiingo_state["blocked_until"]:
+            return pd.DataFrame()          # in cooldown -> skip request, show "—"
+    token = _tiingo_token()
+    if not token:
+        return pd.DataFrame()
+    sym = _tiingo_symbol(ticker)
+    params = {"startDate": _HISTORY_START, "endDate": str(date.today()), "token": token}
+    for attempt in range(3):
+        try:
+            time.sleep(random.uniform(0.15, 0.4))      # gentle pacing
+            resp = _session.get(f"{_TIINGO_URL}/{sym}/prices", params=params,
+                                headers={"Content-Type": "application/json"}, timeout=15)
+            if resp.status_code == 429:
+                with _hist_lock:
+                    _tiingo_state["blocked_until"] = time.time() + 300   # 5-min cooldown
+                time.sleep(1.5 * (attempt + 1) + random.random())        # backoff
+                continue
+            if resp.status_code != 200:
+                return pd.DataFrame()
+            data = resp.json()
+            if not data:
+                return pd.DataFrame()
+            out = pd.DataFrame(
+                {"Close": [row["close"] for row in data]},
+                index=pd.to_datetime([row["date"] for row in data], utc=True),
+            )
+            out.index.name = "Date"
+            with _hist_lock:
+                _hist_cache[ticker] = (time.time(), out)   # cache success only
+            return out
+        except Exception:
+            time.sleep(1.0 * (attempt + 1))
+    return pd.DataFrame()
 
 
-def _history_with_fallback(ticker: str, start: str, end: str):
-    # Retry foreign/suffixed tickers (e.g. "AGN.MX", "SHOP.TO") with the base symbol.
-    hist = _yahoo_chart(ticker, start, end)
-    if hist.empty and "." in ticker:
-        hist = _yahoo_chart(ticker.split(".")[0], start, end)
-    return hist
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _get_returns(ticker: str, base_date_str: str) -> tuple:
+def _returns_from_history(hist: pd.DataFrame, base_date_str: str) -> tuple:
+    """Compute 7/30/90-day returns locally from an already-fetched price history.
+    Blank ('None') when the window hasn't elapsed yet or there's no price data —
+    identical math to before, just fed from the single per-ticker pull."""
     try:
-        base = pd.to_datetime(base_date_str).date()
-        end  = min(base + timedelta(days=100), date.today())
-        hist = _history_with_fallback(ticker, str(base), str(end))
-        if hist.empty:
+        if hist is None or hist.empty:
             return None, None, None
-        base_price = hist["Close"].iloc[0]
+        base     = pd.to_datetime(base_date_str).date()
+        on_after = hist[hist.index.date >= base]
+        if on_after.empty:
+            return None, None, None
+        base_price = on_after["Close"].iloc[0]
 
         def _ret(days: int):
             target = base + timedelta(days=days)
@@ -1029,39 +1059,45 @@ def _get_returns(ticker: str, base_date_str: str) -> tuple:
         return None, None, None
 
 
-@st.cache_data(ttl=21600, show_spinner=False)
+def _get_returns(ticker: str, base_date_str: str) -> tuple:
+    """7/30/90-day returns for a ticker from a transaction date (local compute)."""
+    return _returns_from_history(_fetch_ticker_history(ticker), base_date_str)
+
+
 def _get_spy_returns(base_date_str: str) -> tuple:
-    """S&P 500 (SPY) 7/30/90-day return from a given date — the market benchmark.
-    Cached 6h and keyed only on the date, so it's fetched once per distinct
-    transaction date and reused across every insider buy on that day."""
-    return _get_returns("SPY", base_date_str)
+    """S&P 500 benchmark via SPY — fetched once and reused across every date."""
+    return _returns_from_history(_fetch_ticker_history("SPY"), base_date_str)
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def _get_stock_chart_data(ticker: str, base_date_str: str) -> pd.DataFrame:
+    """30-day post-transaction price series for the Stock Price Explorer, sliced
+    from the ticker's cached history (no extra request)."""
     try:
+        hist = _fetch_ticker_history(ticker)
+        if hist is None or hist.empty:
+            return pd.DataFrame()
         base = pd.to_datetime(base_date_str).date()
         end  = min(base + timedelta(days=35), date.today())
-        hist = _history_with_fallback(ticker, str(base), str(end))
-        if hist.empty:
+        sub  = hist[(hist.index.date >= base) & (hist.index.date <= end)]
+        if sub.empty:
             return pd.DataFrame()
-        hist = hist.reset_index()[["Date", "Close"]]
-        hist["Date"] = pd.to_datetime(hist["Date"]).dt.tz_localize(None)
-        return hist
+        out = sub.reset_index()[["Date", "Close"]]
+        out["Date"] = pd.to_datetime(out["Date"]).dt.tz_localize(None)
+        return out
     except Exception:
         return pd.DataFrame()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def _get_sparkline_prices(ticker: str, ref_date_str: str) -> list:
-    """Last ≤30 closes ending at ref_date for the hover sparkline tooltip."""
+    """Last ≤30 closes ending at ref_date for the hover sparkline, sliced from the
+    ticker's cached history (no extra request)."""
     try:
-        ref   = pd.to_datetime(ref_date_str).date()
-        start = ref - timedelta(days=50)
-        hist  = _history_with_fallback(ticker, str(start), str(ref + timedelta(days=1)))
-        if hist.empty:
+        hist = _fetch_ticker_history(ticker)
+        if hist is None or hist.empty:
             return []
-        return [round(float(c), 2) for c in hist["Close"].tail(30).tolist()]
+        ref = pd.to_datetime(ref_date_str).date()
+        sub = hist[hist.index.date <= ref]
+        return [round(float(c), 2) for c in sub["Close"].tail(30).tolist()]
     except Exception:
         return []
 
@@ -1238,29 +1274,33 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
 
     df["7d Return"] = df["30d Return"] = df["90d Return"] = None
 
-    # Compute post-transaction returns for EVERY ticker'd filing (not just buys):
-    # ~90% of Form 4s are sells/awards, and their price data is just as available,
-    # so restricting to buys is why most rows showed "—". Returns are only left
-    # blank when the window hasn't elapsed yet or the ticker has no price data.
     ret_rows = df[df["Ticker"].astype(bool)]
+    if ret_rows.empty:
+        return df
 
-    if not ret_rows.empty:
-        pairs = list(dict.fromkeys(
-            (row["Ticker"], row["Transaction Date"] or str(row["Filed"].date()))
-            for _, row in ret_rows.iterrows() if row["Ticker"]
-        ))
-        ret_results: dict[tuple, tuple] = {}
-        with ThreadPoolExecutor(max_workers=6) as ex:  # modest concurrency = fewer 429s
-            fmap2 = {ex.submit(_get_returns, t, d): (t, d) for t, d in pairs}
-            for fut in as_completed(fmap2):
-                ret_results[fmap2[fut]] = fut.result()
+    if not _tiingo_token():
+        st.warning(
+            "Set **TIINGO_API_KEY** in Streamlit secrets to load 7/30/90-day returns "
+            "(returns will show “—” until then).",
+            icon="⚠️",
+        )
+        return df
 
-        for idx, row in ret_rows.iterrows():
-            key = (row["Ticker"], row["Transaction Date"] or str(row["Filed"].date()))
-            r7, r30, r90 = ret_results.get(key, (None, None, None))
-            df.at[idx, "7d Return"]  = r7
-            df.at[idx, "30d Return"] = r30
-            df.at[idx, "90d Return"] = r90
+    # Deduplicate to UNIQUE tickers, fetch each ticker's full history exactly once
+    # (per-ticker 6h cache), then compute every filing's returns locally from it.
+    unique_tickers = sorted({t for t in ret_rows["Ticker"] if t})
+    hist_map: dict = {}
+    with ThreadPoolExecutor(max_workers=4) as ex:  # low concurrency, gentle on the API
+        fmap2 = {ex.submit(_fetch_ticker_history, t): t for t in unique_tickers}
+        for fut in as_completed(fmap2):
+            hist_map[fmap2[fut]] = fut.result()
+
+    for idx, row in ret_rows.iterrows():
+        base_str = row["Transaction Date"] or str(row["Filed"].date())
+        r7, r30, r90 = _returns_from_history(hist_map.get(row["Ticker"]), base_str)
+        df.at[idx, "7d Return"]  = r7
+        df.at[idx, "30d Return"] = r30
+        df.at[idx, "90d Return"] = r90
 
     return df
 

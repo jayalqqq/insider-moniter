@@ -15,6 +15,9 @@ __pycache__/
 # Runtime cache / generated data
 filing_cache.json
 
+# Secrets (API keys) — never commit
+.streamlit/secrets.toml
+
 # OS / editor
 .DS_Store
 .vscode/
