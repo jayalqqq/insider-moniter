@@ -852,6 +852,8 @@ def _fmt_returns(r7, r30, r90) -> str:
 
 def _fmt_value(shares, price) -> str:
     try:
+        if shares is None or price is None or pd.isna(shares) or pd.isna(price):
+            return "—"                          # missing -> "—", never "$nan"
         v = float(shares) * float(price)
         return "—" if v == 0 else f"${v:,.0f}"
     except Exception:
@@ -860,9 +862,24 @@ def _fmt_value(shares, price) -> str:
 
 def _fmt_shares(s) -> str:
     try:
+        if s is None or pd.isna(s):             # NaN slips past float() -> guard it
+            return "—"
         return f"{float(s):,.0f}"
     except Exception:
         return "—"
+
+
+def _txn_date(txn, filed) -> str:
+    """A clean 'YYYY-MM-DD' base date: the transaction date when present, else the
+    filing date. Missing values (None / NaN / blank) fall back instead of leaking
+    the literal 'nan' — 'X or fallback' is unsafe here because a float NaN is
+    truthy, so `nan or filed` returns nan."""
+    if isinstance(txn, str) and txn.strip():
+        return txn.strip()
+    try:
+        return str(filed.date()) if pd.notna(filed) else ""
+    except Exception:
+        return ""
 
 
 def _strip_cik(s: str) -> str:
@@ -1343,7 +1360,7 @@ def enrich_with_market_data(df: pd.DataFrame) -> pd.DataFrame:
             hist_map[fmap2[fut]] = fut.result()
 
     for idx, row in ret_rows.iterrows():
-        base_str = row["Transaction Date"] or str(row["Filed"].date())
+        base_str = _txn_date(row["Transaction Date"], row["Filed"])
         r7, r30, r90 = _returns_from_history(hist_map.get(row["Ticker"]), base_str)
         df.at[idx, "7d Return"]  = r7
         df.at[idx, "30d Return"] = r30
@@ -1710,7 +1727,7 @@ if _use_db:
             df["7d Return"] = df["30d Return"] = df["90d Return"] = None
             for _idx, _row in df.iterrows():
                 if _row["Ticker"]:
-                    _base = _row["Transaction Date"] or str(_row["Filed"].date())
+                    _base = _txn_date(_row["Transaction Date"], _row["Filed"])
                     _r7, _r30, _r90 = _returns_from_history(_DB_MODE["prices"].get(_row["Ticker"]), _base)
                     df.at[_idx, "7d Return"]  = _r7
                     df.at[_idx, "30d Return"] = _r30
@@ -1892,7 +1909,7 @@ display = filtered.head(min(filing_limit, 500)).copy()
 display["Filed_str"] = display["Filed"].dt.strftime("%Y-%m-%d").fillna("—")
 
 _spark_pairs = list(dict.fromkeys(
-    (r["Ticker"], r["Transaction Date"] or str(r["Filed"].date()))
+    (r["Ticker"], _txn_date(r["Transaction Date"], r["Filed"]))
     for _, r in display.iterrows()
     if r.get("Ticker")
 ))[:60]
@@ -2196,7 +2213,7 @@ for _c in ("7d Return", "30d Return", "90d Return"):
     _rf_buys[_c] = pd.to_numeric(_rf_buys[_c], errors="coerce")
 
 # S&P 500 benchmark over the same transaction dates (cached per date)
-_rf_dates = sorted({(r["Transaction Date"] or str(r["Filed"].date())) for _, r in _rf_buys.iterrows()})
+_rf_dates = sorted({_txn_date(r["Transaction Date"], r["Filed"]) for _, r in _rf_buys.iterrows()})
 _spy_map: dict = {}
 if _rf_dates:
     with st.spinner("Benchmarking insider buys against the S&P 500…"):
@@ -2216,7 +2233,7 @@ for _h, _col, _i in _HZ:
         iv = r[_col]
         if pd.notna(iv):
             _ins.append(float(iv))
-            sv = _spy_map.get(r["Transaction Date"] or str(r["Filed"].date()), (None, None, None))[_i]
+            sv = _spy_map.get(_txn_date(r["Transaction Date"], r["Filed"]), (None, None, None))[_i]
             if sv is not None:
                 _spy.append(float(sv))
     avg_ins[_h] = (sum(_ins) / len(_ins)) if _ins else None
@@ -2343,7 +2360,7 @@ for _, row in display.iterrows():
     co_cell    = (f"{_star_html}<span class='co-name'>{_html.escape(row['Company'])}</span>"
                   f"{ticker_html}{cluster_html}")
 
-    _spark_key  = (ticker, row.get("Transaction Date") or str(row["Filed"].date())) if ticker else None
+    _spark_key  = (ticker, _txn_date(row.get("Transaction Date"), row["Filed"])) if ticker else None
     _spark_json = json.dumps(spark_map.get(_spark_key, []))
     _est_val    = _fmt_value(row["Shares"], row["Price Per Share"])
 
@@ -2474,7 +2491,7 @@ with table_placeholder.container():
         selected = st.selectbox("Select a filing", options=chart_df["Label"].tolist(), index=0)
         sel      = chart_df[chart_df["Label"] == selected].iloc[0]
         sel_ticker = sel["Ticker"]
-        sel_date   = sel["Transaction Date"] or str(sel["Filed"].date())
+        sel_date   = _txn_date(sel["Transaction Date"], sel["Filed"])
 
         with st.spinner(f"Loading {sel_ticker} chart…"):
             chart_data = _get_stock_chart_data(sel_ticker, sel_date)

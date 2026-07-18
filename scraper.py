@@ -202,18 +202,37 @@ def parse_hit(hit: dict) -> dict:
     }
 
 
-def fetch_filing_detail(adsh: str, cik: str) -> dict:
-    """Pull transaction code/title/shares/price/date out of the raw filing .txt."""
+def fetch_filing_detail(adsh: str, cik: str):
+    """Parse transaction code/title/shares/price/date from the raw filing .txt.
+
+    Returns a detail dict on a SUCCESSFUL fetch — a genuinely holdings-only filing
+    (no transaction) yields the empty defaults, which is accurate. Returns **None**
+    if the fetch itself failed after retries (SEC throttling / timeout). The caller
+    skips those so they retry on a later run instead of writing a bad NULL row or
+    overwriting good data. This is the fix for the ~40% silent NULLs: firing 100
+    requests at once exceeded SEC's ~10 req/s limit; failures were swallowed as
+    the same default an empty filing produces, so we couldn't tell them apart.
+    """
+    url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{adsh.replace('-', '')}/{adsh}.txt"
+    text = None
+    for attempt in range(4):
+        try:
+            time.sleep(random.uniform(0.08, 0.2))      # pacing to stay under SEC's rate limit
+            resp = session.get(url, timeout=20)
+            if resp.status_code == 200:
+                text = resp.text
+                break
+            if resp.status_code in (429, 403, 500, 502, 503, 504):
+                time.sleep(1.0 * (attempt + 1) + random.random())   # backoff on throttle
+                continue
+            return None            # other non-200 -> treat as fetch failure, retry next run
+        except Exception:
+            time.sleep(1.0 * (attempt + 1))
+    if text is None:
+        return None                # fetch failed after retries -> skip (don't store NULL)
+
     detail = {"transaction_type": "Other", "exec_title": "Director",
               "shares": None, "price_per_share": None, "transaction_date": None}
-    url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{adsh.replace('-', '')}/{adsh}.txt"
-    try:
-        resp = session.get(url, timeout=15)
-        if resp.status_code != 200:
-            return detail
-        text = resp.text
-    except Exception:
-        return detail
 
     codes = [c.strip() for c in _CODE_RE.findall(text)]
     for code in ("P", "S", "A"):                  # priority: Buy > Sell > Award
@@ -311,17 +330,34 @@ def main() -> int:
 
     rows = [parse_hit(h) for h in hits]
 
-    # 2. Per-filing detail (transaction type, shares, price, transaction date)
-    print(f"[2/4] Fetching filing details for {len(rows)} filings")
-    done = 0
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    # 2. Per-filing detail (transaction type, shares, price, transaction date).
+    #    Low concurrency + pacing + retries keep us under SEC's ~10 req/s limit so
+    #    fetches don't get throttled and silently stored as NULL. A None result
+    #    means the fetch FAILED (not a holdings-only filing) -> skip that filing so
+    #    it retries next run rather than clobbering a row with NULLs.
+    print(f"[2/4] Fetching filing details for {len(rows)} filings (throttled)")
+    detailed, failed, done = [], 0, 0
+    with ThreadPoolExecutor(max_workers=5) as ex:
         futures = {ex.submit(fetch_filing_detail, r["accession_no"], r["cik"]): r
                    for r in rows if r["accession_no"] and r["cik"]}
         for fut in as_completed(futures):
-            futures[fut].update(fut.result())
+            r = futures[fut]
+            detail = fut.result()
             done += 1
+            if detail is None:
+                failed += 1                 # fetch failed -> skip; retry next run
+            else:
+                r.update(detail)
+                detailed.append(r)
             if done % 25 == 0 or done == len(futures):
                 print(f"      {done}/{len(futures)} details fetched", flush=True)
+    if failed:
+        print(f"      ! {failed} detail fetch(es) failed (throttled/timeout) — "
+              f"skipped, will retry next run")
+    rows = detailed                          # keep only filings we successfully detailed
+    if not rows:
+        print("No filings could be detailed; nothing to store.")
+        return 0
     print()
 
     # 3. Ticker via SEC's authoritative CIK->ticker map (exact, no guessing).
