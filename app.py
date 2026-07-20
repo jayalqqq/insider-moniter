@@ -394,6 +394,15 @@ div[data-baseweb="tag"] {
     white-space: nowrap; overflow: hidden;
     position: sticky; top: 0; z-index: 1;
 }
+/* sortable header affordances (client-side sort, no rerun) */
+.filing-table th.sortable,
+.filing-table .ret-sort.sortable { cursor: pointer; user-select: none; transition: color 0.12s ease; }
+.filing-table th.sortable:hover,
+.filing-table .ret-sort.sortable:hover { color: #cbd5e1; }
+.filing-table th.sorted,
+.filing-table .ret-sort.sorted { color: #e8e8e8; }
+.filing-table .ret-sort { display: inline; }
+.filing-table .sort-ind { font-size: 8px; color: #cbd5e1; letter-spacing: 0; }
 .filing-table td {
     padding: 11px 12px;
     border-bottom: 1px solid #101010;
@@ -878,6 +887,17 @@ def _txn_date(txn, filed) -> str:
         return txn.strip()
     try:
         return str(filed.date()) if pd.notna(filed) else ""
+    except Exception:
+        return ""
+
+
+def _sortnum(x) -> str:
+    """Numeric sort key for a table cell as a string. Missing (None/NaN) -> '' so
+    the client-side sorter floats those rows to the bottom in either direction."""
+    try:
+        if x is None or pd.isna(x):
+            return ""
+        return repr(float(x))
     except Exception:
         return ""
 
@@ -2364,13 +2384,33 @@ for _, row in display.iterrows():
     _spark_json = json.dumps(spark_map.get(_spark_key, []))
     _est_val    = _fmt_value(row["Shares"], row["Price Per Share"])
 
+    # Numeric est-value for sorting (treat 0 / missing as absent -> sorts to bottom,
+    # matching the "—" the display shows for those).
+    try:
+        _val_num = float(row["Shares"]) * float(row["Price Per Share"])
+        _val_num = None if (pd.isna(_val_num) or _val_num == 0) else _val_num
+    except Exception:
+        _val_num = None
+    _date_key = row["Filed_str"] if row.get("Filed_str") not in (None, "—") else ""
+
     rows_html += (
         f'<tr class="{tr_class}"'
         f' data-spark=\'{_spark_json}\''
         f' data-ticker="{_html.escape(ticker)}"'
         f' data-exec-title="{_html.escape(str(row["Exec Title"]))}"'
         f' data-est-value="{_html.escape(_est_val)}"'
-        f' data-sec-url="{_html.escape(url)}">'
+        f' data-sec-url="{_html.escape(url)}"'
+        # sort keys (numeric/date typed; blank = missing -> bottom)
+        f' data-s-date="{_date_key}"'
+        f' data-s-shares="{_sortnum(row["Shares"])}"'
+        f' data-s-value="{_sortnum(_val_num)}"'
+        f' data-s-r7="{_sortnum(row["7d Return"])}"'
+        f' data-s-r30="{_sortnum(row["30d Return"])}"'
+        f' data-s-r90="{_sortnum(row["90d Return"])}"'
+        f' data-s-exec="{_html.escape(str(row["Executive / Filer"]).lower())}"'
+        f' data-s-company="{_html.escape(str(row["Company"]).lower())}"'
+        f' data-s-sector="{_html.escape(sector_lbl.lower())}"'
+        f' data-s-type="{_html.escape(TXN_CLEAN_LABELS.get(txn_type, txn_type).lower())}">'
         f"<td class='col-date'>{row['Filed_str']}</td>"
         f"<td class='col-txn'>{txn_cell}</td>"
         f"<td class='col-exec'>{flag}<span class='exec-name'>{_html.escape(str(row['Executive / Filer']))}</span></td>"
@@ -2395,15 +2435,19 @@ table_html = f"""
       <col class="col-link">
     </colgroup>
     <thead><tr>
-      <th class="col-date">Date</th>
-      <th class="col-txn">Type</th>
-      <th class="col-exec">Executive</th>
+      <th class="col-date sortable" data-sort="s-date" data-type="date">Date<span class="sort-ind"></span></th>
+      <th class="col-txn sortable" data-sort="s-type" data-type="str">Type<span class="sort-ind"></span></th>
+      <th class="col-exec sortable" data-sort="s-exec" data-type="str">Executive<span class="sort-ind"></span></th>
       <th class="col-title">Title</th>
-      <th class="col-co">Company</th>
-      <th class="col-sector">Sector</th>
-      <th class="col-shares">Shares</th>
-      <th class="col-value">Est. Value</th>
-      <th class="col-ret">7d / 30d / 90d Returns</th>
+      <th class="col-co sortable" data-sort="s-company" data-type="str">Company<span class="sort-ind"></span></th>
+      <th class="col-sector sortable" data-sort="s-sector" data-type="str">Sector<span class="sort-ind"></span></th>
+      <th class="col-shares sortable" data-sort="s-shares" data-type="num">Shares<span class="sort-ind"></span></th>
+      <th class="col-value sortable" data-sort="s-value" data-type="num">Est. Value<span class="sort-ind"></span></th>
+      <th class="col-ret">
+        <span class="ret-sort sortable" data-sort="s-r7"  data-type="num">7D<span class="sort-ind"></span></span> /
+        <span class="ret-sort sortable" data-sort="s-r30" data-type="num">30D<span class="sort-ind"></span></span> /
+        <span class="ret-sort sortable" data-sort="s-r90" data-type="num">90D<span class="sort-ind"></span></span>
+      </th>
       <th class="col-link">Link</th>
     </tr></thead>
     <tbody>{rows_html}</tbody>
@@ -2756,6 +2800,64 @@ components.html("""
       });
     });
   }, 350);
+})();
+</script>
+""", height=0)
+
+# ── Sortable filings table (client-side, no rerun) ────────────────────────────
+components.html("""
+<script>
+(function() {
+  var p  = window.parent ? window.parent : window;
+  var pd = p.document;
+  var table = pd.querySelector('.filing-table');
+  if (!table) return;
+  var tbody = table.querySelector('tbody');
+  if (!tbody) return;
+
+  // sort state lives on the table element so it survives within one render
+  var state = { key: null, dir: 1 };
+
+  function missing(v) { return v === null || v === '' ; }
+
+  function doSort(key, type, el) {
+    if (state.key === key) {
+      state.dir = -state.dir;                    // same column -> reverse
+    } else {
+      state.key = key;
+      state.dir = (type === 'str') ? 1 : -1;     // strings A→Z first; numbers/dates biggest/newest first
+    }
+    var attr = 'data-' + key;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    rows.sort(function(a, b) {
+      var av = a.getAttribute(attr), bv = b.getAttribute(attr);
+      var am = missing(av), bm = missing(bv);
+      if (am && bm) return 0;
+      if (am) return 1;                          // missing always sinks to the bottom
+      if (bm) return -1;
+      var cmp;
+      if (type === 'num') { cmp = parseFloat(av) - parseFloat(bv); }
+      else                { cmp = av < bv ? -1 : (av > bv ? 1 : 0); }  // date (ISO) + string
+      return state.dir * cmp;
+    });
+    var frag = pd.createDocumentFragment();
+    rows.forEach(function(r) { frag.appendChild(r); });
+    tbody.appendChild(frag);
+
+    // update indicators: clear all, mark the active one
+    table.querySelectorAll('.sort-ind').forEach(function(s) { s.textContent = ''; });
+    table.querySelectorAll('.sortable.sorted').forEach(function(s) { s.classList.remove('sorted'); });
+    var ind = el.querySelector('.sort-ind');
+    if (ind) ind.textContent = state.dir > 0 ? ' ▲' : ' ▼';
+    el.classList.add('sorted');
+  }
+
+  table.querySelectorAll('.sortable').forEach(function(el) {
+    el.addEventListener('click', function(ev) {
+      ev.stopPropagation();
+      doSort(el.getAttribute('data-sort'), el.getAttribute('data-type') || 'str', el);
+    });
+  });
 })();
 </script>
 """, height=0)
